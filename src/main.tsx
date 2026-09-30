@@ -5,10 +5,10 @@ import './styles.css';
 
 type Role='player'|'staff';
 type Approval='pending'|'approved'|'rejected';
-type Profile={id:string;role:Role;full_name:string;school_grade:number|null;position:string|null;jersey_number:number|null;height_cm:number|null;weight_kg:number|null;dominant_foot:string|null;origin_team:string|null};
+type Profile={id:string;role:Role;full_name:string;school_grade:number|null;position:string|null;jersey_number:number|null;height_cm:number|null;weight_kg:number|null;dominant_foot:string|null;origin_team:string|null;avatar_path:string|null};
 type ApprovalRow={user_id:string;status:Approval;rejection_reason:string|null};
-type Screen='players'|'reports'|'team'|'case'|'admin';
-type PlayerScreen='mypage'|'report'|'history'|'physical'|'settings';
+type Screen='players'|'reports'|'team'|'case'|'chat'|'admin';
+type PlayerScreen='mypage'|'report'|'history'|'physical'|'chat'|'settings';
 
 const statusLabel:Record<string,string>={needs_attention:'要対応',rehab:'リハビリ中',observation:'経過観察',available:'問題なし'};
 const statusClass:Record<string,string>={needs_attention:'danger',rehab:'info',observation:'warn',available:'ok'};
@@ -22,7 +22,7 @@ function App(){
  const [screen,setScreen]=useState<Screen>('team');
  const [loading,setLoading]=useState(true);
  const [error,setError]=useState('');
- const [alerts,setAlerts]=useState<Record<string,number>>({team:0,reports:0,players:0,case:0,admin:0});
+ const [alerts,setAlerts]=useState<Record<string,number>>({team:0,reports:0,players:0,case:0,chat:0,admin:0});
 
  useEffect(()=>{
    supabase.auth.getSession().then(({data})=>{setSession(data.session);setLoading(false)});
@@ -36,7 +36,7 @@ function App(){
    setLoading(true);setError('');
    const uid=session.user.id;
    const [{data:p,error:pe},{data:a,error:ae},{data:ad,error:ade}]=await Promise.all([
-     supabase.from('profiles').select('id,role,full_name,school_grade,position,jersey_number,height_cm,weight_kg,dominant_foot,origin_team').eq('id',uid).maybeSingle(),
+     supabase.from('profiles').select('id,role,full_name,school_grade,position,jersey_number,height_cm,weight_kg,dominant_foot,origin_team,avatar_path').eq('id',uid).maybeSingle(),
      supabase.from('account_approvals').select('user_id,status,rejection_reason').eq('user_id',uid).maybeSingle(),
      supabase.from('app_admins').select('user_id').eq('user_id',uid).maybeSingle()
    ]);
@@ -74,7 +74,8 @@ function App(){
    {screen==='team'&&<Team isAdmin={isAdmin}/>}
    {screen==='reports'&&<Reports profile={profile} isAdmin={isAdmin}/>}
    {screen==='players'&&<Players isAdmin={isAdmin}/>}
-   {screen==='case'&&<Cases isAdmin={isAdmin}/>}
+   {screen==='case'&&<Cases isAdmin={isAdmin}/>} 
+   {screen==='chat'&&<StaffChat profile={profile} isAdmin={isAdmin}/>}
    {screen==='admin'&&isAdmin&&<Admin/>}
  </Shell>;
 }
@@ -105,7 +106,7 @@ function Auth(){
 function Pending({status,reason,onLogout}:{status?:Approval;reason?:string|null;onLogout:()=>void}){return <Center><div className="authCard"><h2>{status==='rejected'?'アカウントは承認されていません':'管理者の承認待ちです'}</h2><p>{status==='rejected'?(reason||'管理者にお問い合わせください。'):'承認後にKTRS MEDを利用できます。'}</p><button onClick={onLogout}>ログアウト</button></div></Center>}
 
 function Shell({profile,isAdmin,screen,setScreen,alerts,onLogout,children}:any){
- const nav:[Screen,string][]=[['team','チーム状況'],['reports','選手報告'],['players','選手一覧'],['case','記録・判断']];
+ const nav:[Screen,string][]=[['team','チーム状況'],['reports','選手報告'],['players','選手一覧'],['case','記録・判断'],['chat','チャット']];
  const alertCount=(k:Screen)=>Number(alerts?.[k]||0);
  return <><header><div><b>KTRS MED</b><span> FIELD MEDICAL HUB</span></div><nav>{nav.map(([k,l])=>{const n=alertCount(k);return <button key={k} className={(screen===k?'active ':'')+(n>0?'unreadTab':'')} onClick={()=>setScreen(k)}>{l}{n>0&&<em>{n}</em>}</button>})}{isAdmin&&(()=>{const n=alertCount('admin');return <button className={(screen==='admin'?'active ':'')+(n>0?'unreadTab':'')} onClick={()=>setScreen('admin')}>管理{n>0&&<em>{n}</em>}</button>})()}</nav><div className="user">{profile?.full_name||''}<button onClick={onLogout}>ログアウト</button></div></header><main>{children}</main><footer>© K-TRAINERS. All rights reserved.<br/><span>傷害情報は認証されたサーバーに保存されます。</span></footer></>;
 }
@@ -113,8 +114,8 @@ function Shell({profile,isAdmin,screen,setScreen,alerts,onLogout,children}:any){
 
 function PlayerPortal({profile,session,onLogout}:{profile:Profile;session:any;onLogout:()=>void}){
  const [screen,setScreen]=useState<PlayerScreen>('mypage');
- const items:[PlayerScreen,string][]=[['mypage','マイページ'],['report','ケガの報告'],['history','ケガの履歴'],['physical','フィジカルデータ'],['settings','設定']];
- return <div className="playerPortal"><header className="playerHeader"><div><b>KTRS MED</b><span> PLAYER PORTAL</span></div><div className="user">{profile.full_name} さん <button onClick={onLogout}>ログアウト</button></div></header><div className="playerBody"><aside className="playerSidebar">{items.map(([k,l])=><button key={k} className={screen===k?'active':''} onClick={()=>setScreen(k)}>{l}</button>)}</aside><main className="playerMain">{screen==='mypage'&&<PlayerMyPage profile={profile}/>} {screen==='report'&&<PlayerInjuryReport profile={profile} onDone={()=>setScreen('history')}/>} {screen==='history'&&<PlayerInjuryHistory profile={profile}/>} {screen==='physical'&&<PhysicalMeasurements profile={profile}/>} {screen==='settings'&&<PlayerSettings profile={profile} session={session}/>}</main></div><footer>© K-TRAINERS. All rights reserved.</footer></div>;
+ const items:[PlayerScreen,string][]=[['mypage','マイページ'],['report','ケガの報告'],['history','ケガの履歴'],['physical','フィジカルデータ'],['chat','チャット'],['settings','設定']];
+ return <div className="playerPortal"><header className="playerHeader"><div><b>KTRS MED</b><span> PLAYER PORTAL</span></div><div className="user">{profile.full_name} さん <button onClick={onLogout}>ログアウト</button></div></header><div className="playerBody"><aside className="playerSidebar">{items.map(([k,l])=><button key={k} className={screen===k?'active':''} onClick={()=>setScreen(k)}>{l}</button>)}</aside><main className="playerMain">{screen==='mypage'&&<PlayerMyPage profile={profile}/>} {screen==='report'&&<PlayerInjuryReport profile={profile} onDone={()=>setScreen('history')}/>} {screen==='history'&&<PlayerInjuryHistory profile={profile}/>} {screen==='physical'&&<PhysicalMeasurements profile={profile}/>} {screen==='chat'&&<PlayerChat profile={profile}/>} {screen==='settings'&&<PlayerSettings profile={profile} session={session}/>}</main></div><footer>© K-TRAINERS. All rights reserved.</footer></div>;
 }
 
 function PlayerMyPage({profile}:{profile:Profile}){
@@ -128,7 +129,7 @@ function PlayerMyPage({profile}:{profile:Profile}){
    ]); setActive(a||[]);setMessages(m||[]);setSchedule(s||[]);
  })()},[profile.id]);
  return <section><Title t="マイページ" s="自分の情報と今週の状況を確認できます"/>
- <div className="panel playerInfoCard"><h3>選手情報</h3><div className="infoGrid"><div><span>氏名</span><b>{profile.full_name}</b></div><div><span>学年</span><b>{profile.school_grade||'-'}年</b></div><div><span>ポジション</span><b>{profile.position||'-'}</b></div><div><span>身長 / 体重</span><b>{profile.height_cm||'-'}cm / {profile.weight_kg||'-'}kg</b></div><div><span>利き足</span><b>{profile.dominant_foot==='right'?'右':profile.dominant_foot==='left'?'左':profile.dominant_foot==='both'?'両方':'-'}</b></div><div><span>出身チーム</span><b>{profile.origin_team||'-'}</b></div></div>
+ <div className="panel playerInfoCard"><div className="playerInfoTop"><Avatar path={profile.avatar_path} name={profile.full_name} size={92}/><div><h3>選手情報</h3><p className="fine">顔写真は「設定」から登録・変更できます。</p></div></div><div className="infoGrid"><div><span>氏名</span><b>{profile.full_name}</b></div><div><span>学年</span><b>{profile.school_grade||'-'}年</b></div><div><span>ポジション</span><b>{profile.position||'-'}</b></div><div><span>身長 / 体重</span><b>{profile.height_cm||'-'}cm / {profile.weight_kg||'-'}kg</b></div><div><span>利き足</span><b>{profile.dominant_foot==='right'?'右':profile.dominant_foot==='left'?'左':profile.dominant_foot==='both'?'両方':'-'}</b></div><div><span>出身チーム</span><b>{profile.origin_team||'-'}</b></div></div>
  {active.length>0&&<div className="activeInjuries"><h4>現在対応中のケガ</h4>{active.map(x=><div className="miniRow" key={x.id}><span>{x.injury_name} / {x.body_part}</span><span className={'pill '+statusClass[x.current_status]}>{statusLabel[x.current_status]}</span></div>)}</div>}</div>
  <div className="panel"><h3>新着メッセージ</h3>{messages.length?messages.map(m=><div className="messageItem" key={m.id}><b>{m.title}</b><p>{m.body||''}</p><small>{new Date(m.created_at).toLocaleDateString('ja-JP')}</small></div>):<div className="empty compact">新着メッセージはありません。</div>}</div>
  <div className="panel"><h3>今週の予定</h3>{schedule.length?schedule.map(s=><div className="scheduleItem" key={s.id}><b>{new Date(s.starts_at).toLocaleDateString('ja-JP',{month:'numeric',day:'numeric',weekday:'short'})}</b><span>{s.title}</span>{s.category&&<small>{s.category}</small>}</div>):<div className="empty compact">今週の予定は登録されていません。</div>}</div>
