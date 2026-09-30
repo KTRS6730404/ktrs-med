@@ -22,7 +22,7 @@ function App(){
  const [screen,setScreen]=useState<Screen>('team');
  const [loading,setLoading]=useState(true);
  const [error,setError]=useState('');
- const [unread,setUnread]=useState(0);
+ const [alerts,setAlerts]=useState<Record<string,number>>({team:0,reports:0,players:0,case:0,admin:0});
 
  useEffect(()=>{
    supabase.auth.getSession().then(({data})=>{setSession(data.session);setLoading(false)});
@@ -30,7 +30,7 @@ function App(){
    return()=>subscription.unsubscribe();
  },[]);
 
- useEffect(()=>{if(!session){setProfile(null);setApproval(null);setIsAdmin(false);setUnread(0);return} loadIdentity()},[session?.user?.id]);
+ useEffect(()=>{if(!session){setProfile(null);setApproval(null);setIsAdmin(false);setAlerts({team:0,reports:0,players:0,case:0,admin:0});return} loadIdentity()},[session?.user?.id]);
 
  async function loadIdentity(){
    setLoading(true);setError('');
@@ -41,16 +41,26 @@ function App(){
      supabase.from('app_admins').select('user_id').eq('user_id',uid).maybeSingle()
    ]);
    if(pe||ae)setError((pe||ae)?.message||'読み込みエラー');
-   setProfile(p as any);setApproval(a as any);setIsAdmin(!!ad&&!ade);
-   const {data:u}=await supabase.rpc('get_unread_injury_report_count');
-   setUnread(Number(u||0));setLoading(false);
+   const adminFlag=!!ad&&!ade;
+   setProfile(p as any);setApproval(a as any);setIsAdmin(adminFlag);
+   if(adminFlag){
+     const {data:counts}=await supabase.rpc('get_admin_tab_alert_counts');
+     setAlerts({...{team:0,reports:0,players:0,case:0,admin:0},...(counts||{})});
+   }else if((p as any)?.role==='staff'){
+     const {data:u}=await supabase.rpc('get_unread_injury_report_count');
+     setAlerts({team:0,reports:Number(u||0),players:0,case:0,admin:0});
+   }
+   setLoading(false);
  }
 
  async function changeScreen(next:Screen){
    setScreen(next);
-   if(next==='reports' && profile?.role==='staff'){
+   if(isAdmin){
+     await supabase.rpc('mark_admin_tab_read',{p_tab_key:next});
+     setAlerts(prev=>({...prev,[next]:0}));
+   }else if(next==='reports' && profile?.role==='staff'){
      await supabase.rpc('mark_injury_reports_read');
-     setUnread(0);
+     setAlerts(prev=>({...prev,reports:0}));
    }
  }
 
@@ -59,7 +69,7 @@ function App(){
  if(approval?.status!=='approved')return <Pending status={approval?.status} reason={approval?.rejection_reason} onLogout={()=>supabase.auth.signOut()}/>;
  if(profile?.role==='player'&&!isAdmin)return <PlayerPortal profile={profile} session={session} onLogout={()=>supabase.auth.signOut()}/>;
 
- return <Shell profile={profile} isAdmin={isAdmin} screen={screen} setScreen={changeScreen} unread={unread} onLogout={()=>supabase.auth.signOut()}>
+ return <Shell profile={profile} isAdmin={isAdmin} screen={screen} setScreen={changeScreen} alerts={alerts} onLogout={()=>supabase.auth.signOut()}>
    {error&&<div className="error">{error}</div>}
    {screen==='team'&&<Team isAdmin={isAdmin}/>}
    {screen==='reports'&&<Reports profile={profile} isAdmin={isAdmin}/>}
@@ -94,9 +104,10 @@ function Auth(){
 
 function Pending({status,reason,onLogout}:{status?:Approval;reason?:string|null;onLogout:()=>void}){return <Center><div className="authCard"><h2>{status==='rejected'?'アカウントは承認されていません':'管理者の承認待ちです'}</h2><p>{status==='rejected'?(reason||'管理者にお問い合わせください。'):'承認後にKTRS MEDを利用できます。'}</p><button onClick={onLogout}>ログアウト</button></div></Center>}
 
-function Shell({profile,isAdmin,screen,setScreen,unread,onLogout,children}:any){
+function Shell({profile,isAdmin,screen,setScreen,alerts,onLogout,children}:any){
  const nav:[Screen,string][]=[['team','チーム状況'],['reports','選手報告'],['players','選手一覧'],['case','記録・判断']];
- return <><header><div><b>KTRS MED</b><span> FIELD MEDICAL HUB</span></div><nav>{nav.map(([k,l])=><button key={k} className={(screen===k?'active ':'')+(k==='reports'&&unread>0?'unreadTab':'')} onClick={()=>setScreen(k)}>{l}{k==='reports'&&unread>0&&<em>{unread}</em>}</button>)}{isAdmin&&<button className={screen==='admin'?'active':''} onClick={()=>setScreen('admin')}>管理</button>}</nav><div className="user">{profile?.full_name||''}<button onClick={onLogout}>ログアウト</button></div></header><main>{children}</main><footer>© K-TRAINERS. All rights reserved.<br/><span>傷害情報は認証されたサーバーに保存されます。</span></footer></>;
+ const alertCount=(k:Screen)=>Number(alerts?.[k]||0);
+ return <><header><div><b>KTRS MED</b><span> FIELD MEDICAL HUB</span></div><nav>{nav.map(([k,l])=>{const n=alertCount(k);return <button key={k} className={(screen===k?'active ':'')+(n>0?'unreadTab':'')} onClick={()=>setScreen(k)}>{l}{n>0&&<em>{n}</em>}</button>})}{isAdmin&&(()=>{const n=alertCount('admin');return <button className={(screen==='admin'?'active ':'')+(n>0?'unreadTab':'')} onClick={()=>setScreen('admin')}>管理{n>0&&<em>{n}</em>}</button>})()}</nav><div className="user">{profile?.full_name||''}<button onClick={onLogout}>ログアウト</button></div></header><main>{children}</main><footer>© K-TRAINERS. All rights reserved.<br/><span>傷害情報は認証されたサーバーに保存されます。</span></footer></>;
 }
 
 
