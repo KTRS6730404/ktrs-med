@@ -11,3 +11,17 @@
 .adminHint{font-size:12px;color:#60758a;background:#eef5fd;border-radius:10px;padding:10px 12px}
 @media(max-width:900px){.filters{grid-template-columns:1fr 1fr}}
 @media(max-width:600px){.filters{grid-template-columns:1fr}}
+
+.playerPortal{min-height:100vh;background:#f5f8fc}
+.playerHeader{position:sticky;top:0;z-index:6;display:flex;justify-content:space-between;align-items:center;padding:14px 22px;background:#fff;border-bottom:1px solid #e7edf4}
+.playerHeader b{color:#0b5fc2;font-size:20px}.playerHeader span{font-size:11px;color:#7a8da3;margin-left:6px}
+.playerBody{display:grid;grid-template-columns:220px minmax(0,1fr);max-width:1400px;margin:0 auto}
+.playerSidebar{padding:22px 14px;border-right:1px solid #e4ebf3;min-height:calc(100vh - 72px);background:#f9fbfe}
+.playerSidebar button{width:100%;text-align:left;margin-bottom:8px;background:#eef4fa;color:#38526d;border:1px solid #e2eaf2}
+.playerSidebar button.active{background:#1267d6;color:white;border-color:#1267d6}
+.playerMain{padding:26px;min-width:0}
+.playerInfoCard{border-top:4px solid #3887e8}.infoGrid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}.infoGrid>div{background:#f7faff;border:1px solid #e6edf5;border-radius:10px;padding:12px}.infoGrid span{display:block;font-size:11px;color:#7c8da0;margin-bottom:3px}
+.activeInjuries{margin-top:16px;border-top:1px solid #edf1f5;padding-top:12px}.miniRow,.scheduleItem,.messageItem{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 0;border-bottom:1px solid #edf1f5}.messageItem{display:block}.messageItem p{margin:5px 0}.scheduleItem small,.messageItem small{color:#8292a3}
+.compact{padding:12px}.topActions{margin:0 0 14px}.physicalGrid{display:grid;grid-template-columns:1.3fr .9fr;gap:16px}.radarPanel{text-align:center}.radar{width:min(100%,360px);height:auto}.inner{border:0}.bulkInput{width:82px;padding:7px;border:1px solid #d7e0eb;border-radius:8px}
+@media(max-width:900px){.playerBody{grid-template-columns:1fr}.playerSidebar{display:flex;gap:8px;overflow:auto;min-height:auto;border-right:0;border-bottom:1px solid #e4ebf3;padding:10px}.playerSidebar button{width:auto;white-space:nowrap;margin:0}.playerMain{padding:18px}.infoGrid{grid-template-columns:1fr 1fr}.physicalGrid{grid-template-columns:1fr}}
+@media(max-width:600px){.infoGrid{grid-template-columns:1fr}.playerHeader{padding:12px 14px}.playerHeader .user{display:block}}
