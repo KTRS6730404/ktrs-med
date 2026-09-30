@@ -8,6 +8,7 @@ type Approval='pending'|'approved'|'rejected';
 type Profile={id:string;role:Role;full_name:string;school_grade:number|null;position:string|null;jersey_number:number|null;height_cm:number|null;weight_kg:number|null;dominant_foot:string|null;origin_team:string|null};
 type ApprovalRow={user_id:string;status:Approval;rejection_reason:string|null};
 type Screen='players'|'reports'|'team'|'case'|'admin';
+type PlayerScreen='mypage'|'report'|'history'|'physical'|'settings';
 
 const statusLabel:Record<string,string>={needs_attention:'要対応',rehab:'リハビリ中',observation:'経過観察',available:'問題なし'};
 const statusClass:Record<string,string>={needs_attention:'danger',rehab:'info',observation:'warn',available:'ok'};
@@ -56,6 +57,7 @@ function App(){
  if(loading)return <Center>読み込み中...</Center>;
  if(!session)return <Auth/>;
  if(approval?.status!=='approved')return <Pending status={approval?.status} reason={approval?.rejection_reason} onLogout={()=>supabase.auth.signOut()}/>;
+ if(profile?.role==='player'&&!isAdmin)return <PlayerPortal profile={profile} session={session} onLogout={()=>supabase.auth.signOut()}/>;
 
  return <Shell profile={profile} isAdmin={isAdmin} screen={screen} setScreen={changeScreen} unread={unread} onLogout={()=>supabase.auth.signOut()}>
    {error&&<div className="error">{error}</div>}
@@ -95,6 +97,76 @@ function Pending({status,reason,onLogout}:{status?:Approval;reason?:string|null;
 function Shell({profile,isAdmin,screen,setScreen,unread,onLogout,children}:any){
  const nav:[Screen,string][]=[['team','チーム状況'],['reports','選手報告'],['players','選手一覧'],['case','記録・判断']];
  return <><header><div><b>KTRS MED</b><span> FIELD MEDICAL HUB</span></div><nav>{nav.map(([k,l])=><button key={k} className={(screen===k?'active ':'')+(k==='reports'&&unread>0?'unreadTab':'')} onClick={()=>setScreen(k)}>{l}{k==='reports'&&unread>0&&<em>{unread}</em>}</button>)}{isAdmin&&<button className={screen==='admin'?'active':''} onClick={()=>setScreen('admin')}>管理</button>}</nav><div className="user">{profile?.full_name||''}<button onClick={onLogout}>ログアウト</button></div></header><main>{children}</main><footer>© K-TRAINERS. All rights reserved.<br/><span>傷害情報は認証されたサーバーに保存されます。</span></footer></>;
+}
+
+
+function PlayerPortal({profile,session,onLogout}:{profile:Profile;session:any;onLogout:()=>void}){
+ const [screen,setScreen]=useState<PlayerScreen>('mypage');
+ const items:[PlayerScreen,string][]=[['mypage','マイページ'],['report','ケガの報告'],['history','ケガの履歴'],['physical','フィジカル測定'],['settings','設定']];
+ return <div className="playerPortal"><header className="playerHeader"><div><b>KTRS MED</b><span> PLAYER PORTAL</span></div><div className="user">{profile.full_name} さん <button onClick={onLogout}>ログアウト</button></div></header><div className="playerBody"><aside className="playerSidebar">{items.map(([k,l])=><button key={k} className={screen===k?'active':''} onClick={()=>setScreen(k)}>{l}</button>)}</aside><main className="playerMain">{screen==='mypage'&&<PlayerMyPage profile={profile}/>} {screen==='report'&&<PlayerInjuryReport profile={profile} onDone={()=>setScreen('history')}/>} {screen==='history'&&<PlayerInjuryHistory profile={profile}/>} {screen==='physical'&&<PhysicalMeasurements profile={profile}/>} {screen==='settings'&&<PlayerSettings profile={profile} session={session}/>}</main></div><footer>© K-TRAINERS. All rights reserved.</footer></div>;
+}
+
+function PlayerMyPage({profile}:{profile:Profile}){
+ const [active,setActive]=useState<any[]>([]),[messages,setMessages]=useState<any[]>([]),[schedule,setSchedule]=useState<any[]>([]);
+ useEffect(()=>{(async()=>{
+   const today=new Date(); const end=new Date(today); end.setDate(today.getDate()+7);
+   const [{data:a},{data:m},{data:s}]=await Promise.all([
+     supabase.from('injury_cases').select('id,injury_name,body_part,current_status,injury_date').eq('player_id',profile.id).neq('current_status','available').order('injury_date',{ascending:false}),
+     supabase.from('player_messages').select('id,title,body,created_at').eq('player_id',profile.id).order('created_at',{ascending:false}).limit(5),
+     supabase.from('player_schedule').select('id,title,starts_at,ends_at,category').gte('starts_at',today.toISOString()).lt('starts_at',end.toISOString()).order('starts_at',{ascending:true})
+   ]); setActive(a||[]);setMessages(m||[]);setSchedule(s||[]);
+ })()},[profile.id]);
+ return <section><Title t="マイページ" s="自分の情報と今週の状況を確認できます"/>
+ <div className="panel playerInfoCard"><h3>選手情報</h3><div className="infoGrid"><div><span>氏名</span><b>{profile.full_name}</b></div><div><span>学年</span><b>{profile.school_grade||'-'}年</b></div><div><span>ポジション</span><b>{profile.position||'-'}</b></div><div><span>身長 / 体重</span><b>{profile.height_cm||'-'}cm / {profile.weight_kg||'-'}kg</b></div><div><span>利き足</span><b>{profile.dominant_foot==='right'?'右':profile.dominant_foot==='left'?'左':profile.dominant_foot==='both'?'両方':'-'}</b></div><div><span>出身チーム</span><b>{profile.origin_team||'-'}</b></div></div>
+ {active.length>0&&<div className="activeInjuries"><h4>現在対応中のケガ</h4>{active.map(x=><div className="miniRow" key={x.id}><span>{x.injury_name} / {x.body_part}</span><span className={'pill '+statusClass[x.current_status]}>{statusLabel[x.current_status]}</span></div>)}</div>}</div>
+ <div className="panel"><h3>新着メッセージ</h3>{messages.length?messages.map(m=><div className="messageItem" key={m.id}><b>{m.title}</b><p>{m.body||''}</p><small>{new Date(m.created_at).toLocaleDateString('ja-JP')}</small></div>):<div className="empty compact">新着メッセージはありません。</div>}</div>
+ <div className="panel"><h3>今週の予定</h3>{schedule.length?schedule.map(s=><div className="scheduleItem" key={s.id}><b>{new Date(s.starts_at).toLocaleDateString('ja-JP',{month:'numeric',day:'numeric',weekday:'short'})}</b><span>{s.title}</span>{s.category&&<small>{s.category}</small>}</div>):<div className="empty compact">今週の予定は登録されていません。</div>}</div>
+ </section>;
+}
+
+function emptyReport(){return {injury_date:'',symptom:'',body_part:'',side:'right',activity:'',mechanism:'',hospital_status:'未受診',facility_name:'',visit_date:'',diagnosis:'',instructed_plan:'',notes:''}}
+
+function PlayerInjuryReport({profile,onDone}:{profile:Profile;onDone:()=>void}){
+ const [form,setForm]=useState<any>(emptyReport()),[msg,setMsg]=useState('');
+ async function submit(e:React.FormEvent){e.preventDefault();const {error}=await supabase.from('injury_reports').insert({player_id:profile.id,...form,visit_date:form.visit_date||null,review_status:'pending'});setMsg(error?error.message:'ケガの報告を送信しました。');if(!error){setForm(emptyReport());setTimeout(onDone,300)}}
+ return <section><Title t="ケガの報告" s="新しいケガ・症状を報告します"/><form className="panel form" onSubmit={submit}><ReportFields value={form} setValue={setForm}/><button>報告する</button></form>{msg&&<div className="notice">{msg}</div>}</section>;
+}
+
+function PlayerInjuryHistory({profile}:{profile:Profile}){
+ const [rows,setRows]=useState<any[]>([]),[edit,setEdit]=useState<any|null>(null),[msg,setMsg]=useState('');
+ useEffect(()=>{load()},[]);
+ async function load(){const {data,error}=await supabase.from('injury_reports').select('id,player_id,injury_date,symptom,body_part,side,activity,mechanism,hospital_status,facility_name,visit_date,diagnosis,instructed_plan,notes,review_status,created_at,player_edited_fields,player_last_edited_at').eq('player_id',profile.id).order('injury_date',{ascending:false});if(error)setMsg(error.message);setRows(data||[])}
+ async function save(){if(!edit)return;const {error}=await supabase.rpc('player_update_own_injury_report',{p_report_id:edit.id,p_injury_date:edit.injury_date,p_symptom:edit.symptom,p_body_part:edit.body_part,p_side:edit.side,p_activity:edit.activity||null,p_mechanism:edit.mechanism||null,p_hospital_status:edit.hospital_status||null,p_facility_name:edit.facility_name||null,p_visit_date:edit.visit_date||null,p_diagnosis:edit.diagnosis||null,p_instructed_plan:edit.instructed_plan||null,p_notes:edit.notes||null});setMsg(error?error.message:'履歴を更新しました。');if(!error){setEdit(null);load()}}
+ const changed=(r:any,k:string)=>Array.isArray(r.player_edited_fields)&&r.player_edited_fields.includes(k);
+ return <section><Title t="ケガの履歴" s="該当するケガを選択して報告内容を編集できます"/>{msg&&<div className="notice">{msg}</div>}<div className="tableWrap"><table><thead><tr><th>受傷日</th><th>ケガ・症状</th><th>部位</th><th>受診</th><th>編集</th></tr></thead><tbody>{rows.map(r=><tr key={r.id}><td className={changed(r,'injury_date')?'changed':''}>{r.injury_date}</td><td className={changed(r,'symptom')?'changed':''}>{r.symptom}</td><td className={changed(r,'body_part')?'changed':''}>{r.body_part}</td><td>{r.hospital_status||'-'}</td><td><button onClick={()=>setEdit({...r})}>選択・編集</button></td></tr>)}</tbody></table>{!rows.length&&<div className="empty">ケガの履歴はありません。</div>}</div>
+ {edit&&<div className="panel form editPanel"><h3>{edit.injury_date}｜{edit.symptom}</h3><p className="fine">変更した項目は保存後、赤文字・赤枠で表示されます。</p><ReportFields value={edit} setValue={setEdit} changedFields={edit.player_edited_fields}/><div className="actions"><button onClick={save}>変更を保存</button><button className="secondary" onClick={()=>setEdit(null)}>キャンセル</button></div></div>}</section>;
+}
+
+function PhysicalMeasurements({profile}:{profile:Profile}){
+ const [rows,setRows]=useState<any[]>([]),[showInput,setShowInput]=useState(false),[msg,setMsg]=useState('');
+ useEffect(()=>{load()},[]);
+ async function load(){const {data}=await supabase.from('physical_measurement_records').select('*').eq('player_id',profile.id).order('measured_at',{ascending:false});setRows(data||[])}
+ async function add(){const {error}=await supabase.from('physical_measurement_records').insert({player_id:profile.id,category:'基本測定',metrics:{},created_by:profile.id});setMsg(error?error.message:'新規測定枠を作成しました。測定項目は後ほど設定できます。');if(!error){setShowInput(false);load()}}
+ const axes=['速度','持久力','筋力','パワー','敏捷性','柔軟性'];
+ return <section><Title t="フィジカル測定" s="測定項目の詳細は後ほど設定します"/><div className="actions topActions"><button onClick={()=>setShowInput(true)}>＋ 新規入力</button><button className="secondary" disabled={!rows.length}>編集</button></div>
+ <div className="physicalGrid"><div className="panel"><h3>測定記録</h3><div className="tableWrap inner"><table><thead><tr><th>測定日</th><th>カテゴリー</th><th>本人</th><th>平均</th></tr></thead><tbody>{rows.map(r=><tr key={r.id}><td>{r.measured_at}</td><td>{r.category}</td><td>—</td><td>—</td></tr>)}</tbody></table>{!rows.length&&<div className="empty">測定記録はまだありません。</div>}</div></div>
+ <div className="panel radarPanel"><h3>平均値との比較</h3><RadarPlaceholder axes={axes}/><p className="fine">測定項目確定後、本人値とカテゴリー平均を重ねて表示します。</p></div></div>
+ {showInput&&<div className="panel form"><h3>新規入力</h3><p>現在は測定枠のみ作成できます。詳細項目は後ほど追加します。</p><div className="actions"><button onClick={add}>測定枠を追加</button><button className="secondary" onClick={()=>setShowInput(false)}>キャンセル</button></div></div>}{msg&&<div className="notice">{msg}</div>}</section>;
+}
+
+function RadarPlaceholder({axes}:{axes:string[]}){
+ const center=120,r=82; const pts=axes.map((_,i)=>{const a=(-90+i*360/axes.length)*Math.PI/180;return [center+r*Math.cos(a),center+r*Math.sin(a)]});
+ return <svg className="radar" viewBox="0 0 240 240" aria-label="平均比較レーダーチャート">{[1,.75,.5,.25].map(k=><polygon key={k} points={pts.map(([x,y])=>center+(x-center)*k+','+(center+(y-center)*k)).join(' ')} fill="none" stroke="#dce6f1"/>)}
+ {pts.map(([x,y],i)=><g key={axes[i]}><line x1={center} y1={center} x2={x} y2={y} stroke="#dce6f1"/><text x={center+(x-center)*1.17} y={center+(y-center)*1.17} textAnchor="middle" dominantBaseline="middle" fontSize="10" fill="#60758a">{axes[i]}</text></g>)}<text x="120" y="120" textAnchor="middle" fontSize="12" fill="#8a9bae">データ未登録</text></svg>;
+}
+
+function PlayerSettings({profile,session}:{profile:Profile;session:any}){
+ const [form,setForm]=useState<any>({...profile,birth_date:'',phone:''}),[email,setEmail]=useState(session?.user?.email||''),[password,setPassword]=useState(''),[msg,setMsg]=useState('');
+ useEffect(()=>{supabase.from('profiles').select('full_name,birth_date,phone,origin_team,height_cm,weight_kg,dominant_foot,school_grade,position').eq('id',profile.id).maybeSingle().then(({data})=>data&&setForm(data))},[profile.id]);
+ async function saveProfile(){const {error}=await supabase.from('profiles').update({full_name:form.full_name,birth_date:form.birth_date||null,phone:form.phone||null,origin_team:form.origin_team||null,height_cm:form.height_cm||null,weight_kg:form.weight_kg||null,dominant_foot:form.dominant_foot||null,school_grade:form.school_grade||null,position:form.position||null}).eq('id',profile.id);setMsg(error?error.message:'基本情報を保存しました。')}
+ async function saveAuth(){let error:any=null;if(email&&email!==session?.user?.email){const r=await supabase.auth.updateUser({email});error=r.error}if(!error&&password){const r=await supabase.auth.updateUser({password});error=r.error}setMsg(error?error.message:'ログイン情報を更新しました。メール変更時は確認メールが届く場合があります。');if(!error)setPassword('')}
+ return <section><Title t="設定" s="身体情報・経歴・ログイン情報を変更できます"/><div className="panel form"><h3>身体情報・経歴</h3><div className="grid2"><input placeholder="氏名" value={form.full_name||''} onChange={e=>setForm({...form,full_name:e.target.value})}/><input type="date" value={form.birth_date||''} onChange={e=>setForm({...form,birth_date:e.target.value})}/><input placeholder="電話番号" value={form.phone||''} onChange={e=>setForm({...form,phone:e.target.value})}/><input placeholder="出身チーム" value={form.origin_team||''} onChange={e=>setForm({...form,origin_team:e.target.value})}/><input type="number" placeholder="身長 cm" value={form.height_cm??''} onChange={e=>setForm({...form,height_cm:e.target.value===''?null:Number(e.target.value)})}/><input type="number" placeholder="体重 kg" value={form.weight_kg??''} onChange={e=>setForm({...form,weight_kg:e.target.value===''?null:Number(e.target.value)})}/><select value={form.dominant_foot||'right'} onChange={e=>setForm({...form,dominant_foot:e.target.value})}><option value="right">右利き</option><option value="left">左利き</option><option value="both">両利き</option></select><select value={form.school_grade||1} onChange={e=>setForm({...form,school_grade:Number(e.target.value)})}><option value={1}>1年</option><option value={2}>2年</option><option value={3}>3年</option></select><select value={form.position||'FW'} onChange={e=>setForm({...form,position:e.target.value})}><option>GK</option><option>DF</option><option>MF</option><option>FW</option></select></div><button onClick={saveProfile}>基本情報を保存</button></div>
+ <div className="panel form"><h3>ID・パスワード</h3><input type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="ログインID（メール）"/><input type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="新しいパスワード（8文字以上・英数字）"/><button onClick={saveAuth}>ログイン情報を変更</button></div>{msg&&<div className="notice">{msg}</div>}</section>;
 }
 
 function Team({isAdmin}:{isAdmin:boolean}){
