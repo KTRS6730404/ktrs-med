@@ -194,6 +194,72 @@ function PlayerSettings({profile,session}:{profile:Profile;session:any}){
  <div className="panel form"><h3>ID・パスワード</h3><input type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="ログインID（メール）"/><input type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="新しいパスワード（8文字以上・英数字）"/><button onClick={saveAuth}>ログイン情報を変更</button></div>{msg&&<div className="notice">{msg}</div>}</section>;
 }
 
+
+function Avatar({path,name,size=48}:{path?:string|null;name:string;size?:number}){
+ const [url,setUrl]=useState('');
+ useEffect(()=>{let alive=true;if(!path){setUrl('');return}supabase.storage.from('profile-photos').createSignedUrl(path,3600).then(({data})=>{if(alive)setUrl(data?.signedUrl||'')});return()=>{alive=false}},[path]);
+ const initials=(name||'?').slice(0,1);
+ return <div className="avatar" style={{width:size,height:size,minWidth:size}}>{url?<img src={url} alt={name}/>:<span>{initials}</span>}</div>;
+}
+
+function PlayerChat({profile}:{profile:Profile}){
+ const [staff,setStaff]=useState<any[]>([]),[messages,setMessages]=useState<any[]>([]),[recipient,setRecipient]=useState(''),[body,setBody]=useState(''),[confirm,setConfirm]=useState(false),[msg,setMsg]=useState('');
+ useEffect(()=>{load()},[]);
+ async function load(){
+   const [{data:s},{data:m}]=await Promise.all([
+     supabase.from('chat_staff_directory').select('user_id,full_name').eq('approval_status','approved').order('full_name'),
+     supabase.from('chat_messages').select('*').order('created_at',{ascending:true})
+   ]);
+   setStaff(s||[]);setMessages(m||[]);
+   await supabase.from('chat_messages').update({read_at:new Date().toISOString()}).eq('recipient_id',profile.id).is('read_at',null);
+ }
+ const staffMap=new Map(staff.map(s=>[s.user_id,s.full_name]));
+ const nameOf=(id:string)=>id===profile.id?profile.full_name:(staffMap.get(id)||'スタッフ');
+ async function send(){
+   if(!recipient||!body.trim())return;
+   const {error}=await supabase.from('chat_messages').insert({sender_id:profile.id,recipient_id:recipient,body:body.trim()});
+   setMsg(error?error.message:'送信しました。');if(!error){setBody('');setConfirm(false);load()}
+ }
+ return <section><Title t="チャット" s="スタッフへメッセージを送信できます"/>
+ <div className="chatLayout"><div className="panel chatHistory"><h3>メッセージ履歴</h3>{messages.length?messages.map(m=><div className={'chatBubble '+(m.sender_id===profile.id?'mine':'theirs')} key={m.id}><div className="chatMeta">{nameOf(m.sender_id)} → {nameOf(m.recipient_id)}　{new Date(m.created_at).toLocaleString('ja-JP')}</div><div>{m.body}</div></div>):<div className="empty">メッセージはまだありません。</div>}</div>
+ <div className="panel chatComposer"><h3>メッセージを作成</h3><label>宛先</label><select value={recipient} onChange={e=>setRecipient(e.target.value)}><option value="">スタッフを選択</option>{staff.map(s=><option value={s.user_id} key={s.user_id}>{s.full_name}</option>)}</select><label>メッセージ</label><textarea rows={8} maxLength={4000} value={body} onChange={e=>setBody(e.target.value)} placeholder="メッセージを入力"/><button disabled={!recipient||!body.trim()} onClick={()=>setConfirm(true)}>送信内容を確認</button></div></div>
+ {confirm&&<div className="confirmOverlay"><div className="confirmCard"><h3>送信内容の確認</h3><p><b>宛先：</b>{nameOf(recipient)}</p><div className="confirmMessage">{body}</div><p className="fine">この内容で送信しますか？</p><div className="actions"><button onClick={send}>送信を確定</button><button className="secondary" onClick={()=>setConfirm(false)}>戻って修正</button></div></div></div>}
+ {msg&&<div className="notice">{msg}</div>}</section>;
+}
+
+function StaffChat({profile,isAdmin}:{profile:Profile|null;isAdmin:boolean}){
+ const [people,setPeople]=useState<any[]>([]),[messages,setMessages]=useState<any[]>([]),[recipient,setRecipient]=useState(''),[body,setBody]=useState(''),[confirm,setConfirm]=useState(false),[msg,setMsg]=useState('');
+ const [filters,setFilters]=useState({person:'',keyword:'',date:''});
+ useEffect(()=>{load()},[]);
+ async function load(){
+   const [{data:p},{data:m}]=await Promise.all([
+     supabase.from('profiles').select('id,full_name,role,avatar_path').order('full_name'),
+     supabase.from('chat_messages').select('*').order('created_at',{ascending:false})
+   ]);
+   setPeople(p||[]);setMessages(m||[]);
+   if(profile?.id)await supabase.from('chat_messages').update({read_at:new Date().toISOString()}).eq('recipient_id',profile.id).is('read_at',null);
+ }
+ const map=new Map(people.map(p=>[p.id,p]));
+ const nameOf=(id:string)=>map.get(id)?.full_name||'不明';
+ const filtered=useMemo(()=>messages.filter(m=>{
+   const personOk=!filters.person||m.sender_id===filters.person||m.recipient_id===filters.person;
+   const keywordOk=!filters.keyword||String(m.body||'').toLowerCase().includes(filters.keyword.toLowerCase())||nameOf(m.sender_id).includes(filters.keyword)||nameOf(m.recipient_id).includes(filters.keyword);
+   const dateOk=!filters.date||String(m.created_at||'').slice(0,10)===filters.date;
+   return personOk&&keywordOk&&dateOk;
+ }),[messages,filters,people]);
+ async function send(){
+   if(!profile?.id||!recipient||!body.trim())return;
+   const {error}=await supabase.from('chat_messages').insert({sender_id:profile.id,recipient_id:recipient,body:body.trim()});
+   setMsg(error?error.message:'送信しました。');if(!error){setBody('');setConfirm(false);load()}
+ }
+ return <section><Title t="チャット" s={isAdmin?'全選手・スタッフのチャットを確認できます':'自分宛て・自分が送信したチャットを確認できます'}/>
+ {isAdmin&&<div className="chatFilters"><select value={filters.person} onChange={e=>setFilters({...filters,person:e.target.value})}><option value="">全参加者</option>{people.map(p=><option key={p.id} value={p.id}>{p.full_name}（{p.role==='player'?'選手':'スタッフ'}）</option>)}</select><input placeholder="キーワード検索" value={filters.keyword} onChange={e=>setFilters({...filters,keyword:e.target.value})}/><input type="date" value={filters.date} onChange={e=>setFilters({...filters,date:e.target.value})}/><button className="secondary" onClick={()=>setFilters({person:'',keyword:'',date:''})}>検索条件をクリア</button></div>}
+ <div className="chatLayout adminChat"><div className="panel chatHistory"><h3>{isAdmin?'全チャット':'チャット履歴'}</h3>{filtered.length?filtered.map(m=><div className="adminChatRow" key={m.id}><div className="chatPeople"><div className="personCell"><Avatar path={map.get(m.sender_id)?.avatar_path} name={nameOf(m.sender_id)} size={34}/><b>{nameOf(m.sender_id)}</b></div><span>→</span><div className="personCell"><Avatar path={map.get(m.recipient_id)?.avatar_path} name={nameOf(m.recipient_id)} size={34}/><b>{nameOf(m.recipient_id)}</b></div></div><div className="chatBody">{m.body}</div><small>{new Date(m.created_at).toLocaleString('ja-JP')}</small></div>):<div className="empty">該当するチャットはありません。</div>}</div>
+ <div className="panel chatComposer"><h3>メッセージを作成</h3><label>宛先</label><select value={recipient} onChange={e=>setRecipient(e.target.value)}><option value="">宛先を選択</option>{people.filter(p=>p.id!==profile?.id).map(p=><option value={p.id} key={p.id}>{p.full_name}（{p.role==='player'?'選手':'スタッフ'}）</option>)}</select><label>メッセージ</label><textarea rows={8} maxLength={4000} value={body} onChange={e=>setBody(e.target.value)} placeholder="メッセージを入力"/><button disabled={!recipient||!body.trim()} onClick={()=>setConfirm(true)}>送信内容を確認</button></div></div>
+ {confirm&&<div className="confirmOverlay"><div className="confirmCard"><h3>送信内容の確認</h3><p><b>宛先：</b>{nameOf(recipient)}</p><div className="confirmMessage">{body}</div><p className="fine">この内容で送信しますか？</p><div className="actions"><button onClick={send}>送信を確定</button><button className="secondary" onClick={()=>setConfirm(false)}>戻って修正</button></div></div></div>}
+ {msg&&<div className="notice">{msg}</div>}</section>;
+}
+
 function Team({isAdmin}:{isAdmin:boolean}){
  const [d,setD]=useState<any>(null);
  useEffect(()=>{supabase.from('team_status_summary').select('*').maybeSingle().then(({data})=>setD(data))},[]);
