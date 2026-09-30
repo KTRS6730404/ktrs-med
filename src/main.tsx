@@ -181,7 +181,7 @@ function PlayerSettings({profile,session}:{profile:Profile;session:any}){
    if(!file.type.startsWith('image/')){setMsg('画像ファイルを選択してください。');setUploading(false);return}
    if(file.size>5*1024*1024){setMsg('画像は5MB以下にしてください。');setUploading(false);return}
    const ext=(file.name.split('.').pop()||'jpg').toLowerCase();
-   const path=\`\${profile.id}/avatar.\${ext}\`;
+   const path=`${profile.id}/avatar.${ext}`;
    const {error:upErr}=await supabase.storage.from('profile-photos').upload(path,file,{upsert:true,contentType:file.type});
    if(upErr){setMsg(upErr.message);setUploading(false);return}
    const {error:pErr}=await supabase.from('profiles').update({avatar_path:path}).eq('id',profile.id);
