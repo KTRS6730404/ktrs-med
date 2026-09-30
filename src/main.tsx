@@ -7,48 +7,200 @@ type Role='player'|'staff';
 type Approval='pending'|'approved'|'rejected';
 type Profile={id:string;role:Role;full_name:string;school_grade:number|null;position:string|null;jersey_number:number|null;height_cm:number|null;weight_kg:number|null;dominant_foot:string|null;origin_team:string|null};
 type ApprovalRow={user_id:string;status:Approval;rejection_reason:string|null};
-type CaseRow={case_id:string;player_id:string;full_name:string;school_grade:number|null;position:string|null;injury_name:string;body_part:string;side:string|null;current_status:string;injury_date:string;updated_at:string;latest_rtp_status:string|null;open_tasks:number};
-type ReportRow={id:number;player_id:string;injury_date:string;symptom:string;body_part:string;side:string|null;review_status:string;created_at:string};
-
 type Screen='players'|'reports'|'team'|'case'|'admin';
 
-const statusLabel:Record<string,string>={needs_attention:'要対応',rehab:'リハビリ中',observation:'経過観察',available:'参加可'};
+const statusLabel:Record<string,string>={needs_attention:'要対応',rehab:'リハビリ中',observation:'経過観察',available:'問題なし'};
 const statusClass:Record<string,string>={needs_attention:'danger',rehab:'info',observation:'warn',available:'ok'};
+const availabilityLabel:Record<string,string>={out:'参加不可',modified:'別メニュー',partial:'部分参加',full:'通常参加'};
 
 function App(){
- const [session,setSession]=useState<any>(null),[profile,setProfile]=useState<Profile|null>(null),[approval,setApproval]=useState<ApprovalRow|null>(null),[isAdmin,setIsAdmin]=useState(false),[screen,setScreen]=useState<Screen>('players'),[loading,setLoading]=useState(true),[error,setError]=useState('');
- useEffect(()=>{supabase.auth.getSession().then(({data})=>{setSession(data.session); setLoading(false)}); const {data:{subscription}}=supabase.auth.onAuthStateChange((_e,s)=>setSession(s)); return()=>subscription.unsubscribe()},[]);
- useEffect(()=>{ if(!session){setProfile(null);setApproval(null);setIsAdmin(false);return;} loadIdentity(); },[session?.user?.id]);
- async function loadIdentity(){ setLoading(true); setError(''); const uid=session.user.id; const [{data:p,error:pe},{data:a,error:ae},{data:ad,error:ade}]=await Promise.all([
-   supabase.from('profiles').select('id,role,full_name,school_grade,position,jersey_number,height_cm,weight_kg,dominant_foot,origin_team').eq('id',uid).maybeSingle(),
-   supabase.from('account_approvals').select('user_id,status,rejection_reason').eq('user_id',uid).maybeSingle(),
-   supabase.from('app_admins').select('user_id').eq('user_id',uid).maybeSingle()
- ]); if(pe||ae){setError((pe||ae)?.message||'読み込みエラー');} setProfile(p as any); setApproval(a as any); setIsAdmin(!!ad&&!ade); setLoading(false); }
- if(loading) return <Center>読み込み中...</Center>;
- if(!session) return <Auth />;
- if(approval?.status!=='approved') return <Pending status={approval?.status} reason={approval?.rejection_reason} onLogout={()=>supabase.auth.signOut()} />;
- return <Shell profile={profile} isAdmin={isAdmin} screen={screen} setScreen={setScreen} onLogout={()=>supabase.auth.signOut()}>{error&&<div className="error">{error}</div>}{screen==='players'&&<Players/>}{screen==='reports'&&<Reports profile={profile}/>} {screen==='team'&&<Team/>}{screen==='admin'&&isAdmin&&<Admin/>}{screen==='case'&&<Cases/>}</Shell>
+ const [session,setSession]=useState<any>(null);
+ const [profile,setProfile]=useState<Profile|null>(null);
+ const [approval,setApproval]=useState<ApprovalRow|null>(null);
+ const [isAdmin,setIsAdmin]=useState(false);
+ const [screen,setScreen]=useState<Screen>('team');
+ const [loading,setLoading]=useState(true);
+ const [error,setError]=useState('');
+ const [unread,setUnread]=useState(0);
+
+ useEffect(()=>{
+   supabase.auth.getSession().then(({data})=>{setSession(data.session);setLoading(false)});
+   const {data:{subscription}}=supabase.auth.onAuthStateChange((_e,s)=>setSession(s));
+   return()=>subscription.unsubscribe();
+ },[]);
+
+ useEffect(()=>{if(!session){setProfile(null);setApproval(null);setIsAdmin(false);setUnread(0);return} loadIdentity()},[session?.user?.id]);
+
+ async function loadIdentity(){
+   setLoading(true);setError('');
+   const uid=session.user.id;
+   const [{data:p,error:pe},{data:a,error:ae},{data:ad,error:ade}]=await Promise.all([
+     supabase.from('profiles').select('id,role,full_name,school_grade,position,jersey_number,height_cm,weight_kg,dominant_foot,origin_team').eq('id',uid).maybeSingle(),
+     supabase.from('account_approvals').select('user_id,status,rejection_reason').eq('user_id',uid).maybeSingle(),
+     supabase.from('app_admins').select('user_id').eq('user_id',uid).maybeSingle()
+   ]);
+   if(pe||ae)setError((pe||ae)?.message||'読み込みエラー');
+   setProfile(p as any);setApproval(a as any);setIsAdmin(!!ad&&!ade);
+   const {data:u}=await supabase.rpc('get_unread_injury_report_count');
+   setUnread(Number(u||0));setLoading(false);
+ }
+
+ async function changeScreen(next:Screen){
+   setScreen(next);
+   if(next==='reports' && profile?.role==='staff'){
+     await supabase.rpc('mark_injury_reports_read');
+     setUnread(0);
+   }
+ }
+
+ if(loading)return <Center>読み込み中...</Center>;
+ if(!session)return <Auth/>;
+ if(approval?.status!=='approved')return <Pending status={approval?.status} reason={approval?.rejection_reason} onLogout={()=>supabase.auth.signOut()}/>;
+
+ return <Shell profile={profile} isAdmin={isAdmin} screen={screen} setScreen={changeScreen} unread={unread} onLogout={()=>supabase.auth.signOut()}>
+   {error&&<div className="error">{error}</div>}
+   {screen==='team'&&<Team isAdmin={isAdmin}/>}
+   {screen==='reports'&&<Reports profile={profile} isAdmin={isAdmin}/>}
+   {screen==='players'&&<Players isAdmin={isAdmin}/>}
+   {screen==='case'&&<Cases isAdmin={isAdmin}/>}
+   {screen==='admin'&&isAdmin&&<Admin/>}
+ </Shell>;
 }
 
-function Auth(){const [mode,setMode]=useState<'login'|'signup'>('login'),[busy,setBusy]=useState(false),[msg,setMsg]=useState(''); const [form,setForm]=useState<any>({email:'',password:'',password2:'',role:'player',full_name:'',school_grade:'1',position:'FW',height_cm:'',weight_kg:'',dominant_foot:'right',origin_team:''});
- const submit=async(e:React.FormEvent)=>{e.preventDefault();setBusy(true);setMsg(''); if(mode==='signup'&&form.password!==form.password2){setMsg('パスワードが一致しません');setBusy(false);return} if(!/^(?=.*[A-Za-z])(?=.*\d).{8,}$/.test(form.password)){setMsg('パスワードは8文字以上、英字と数字を含めてください');setBusy(false);return}
- if(mode==='login'){const {error}=await supabase.auth.signInWithPassword({email:form.email,password:form.password}); if(error)setMsg(error.message)} else {const metadata:any={role:form.role,full_name:form.full_name}; if(form.role==='player')Object.assign(metadata,{school_grade:Number(form.school_grade),position:form.position,height_cm:Number(form.height_cm),weight_kg:Number(form.weight_kg),dominant_foot:form.dominant_foot,origin_team:form.origin_team}); const {error}=await supabase.auth.signUp({email:form.email,password:form.password,options:{data:metadata}}); setMsg(error?error.message:'登録しました。管理者の承認後に利用できます。');} setBusy(false)};
- return <div className="authPage"><div className="authCard"><div className="brandBig">KTRS MED</div><div className="sub">FIELD MEDICAL HUB</div><h2>{mode==='login'?'ログイン':'アカウント新規作成'}</h2><form onSubmit={submit} className="form"><input placeholder="メールアドレス" type="email" required value={form.email} onChange={e=>setForm({...form,email:e.target.value})}/><input placeholder="パスワード" type="password" required value={form.password} onChange={e=>setForm({...form,password:e.target.value})}/>{mode==='signup'&&<><input placeholder="パスワード（確認）" type="password" required value={form.password2} onChange={e=>setForm({...form,password2:e.target.value})}/><input placeholder="氏名" required value={form.full_name} onChange={e=>setForm({...form,full_name:e.target.value})}/><select value={form.role} onChange={e=>setForm({...form,role:e.target.value})}><option value="player">選手</option><option value="staff">スタッフ</option></select>{form.role==='player'&&<div className="grid2"><select value={form.school_grade} onChange={e=>setForm({...form,school_grade:e.target.value})}><option>1</option><option>2</option><option>3</option></select><select value={form.position} onChange={e=>setForm({...form,position:e.target.value})}><option>GK</option><option>DF</option><option>MF</option><option>FW</option></select><input placeholder="身長 cm" type="number" required value={form.height_cm} onChange={e=>setForm({...form,height_cm:e.target.value})}/><input placeholder="体重 kg" type="number" required value={form.weight_kg} onChange={e=>setForm({...form,weight_kg:e.target.value})}/><select value={form.dominant_foot} onChange={e=>setForm({...form,dominant_foot:e.target.value})}><option value="right">右</option><option value="left">左</option><option value="both">両方</option></select><input placeholder="出身チーム" value={form.origin_team} onChange={e=>setForm({...form,origin_team:e.target.value})}/></div>}</>}
- <button disabled={busy}>{busy?'処理中...':mode==='login'?'ログイン':'登録する'}</button></form>{msg&&<div className="notice">{msg}</div>}<button className="linkBtn" onClick={()=>setMode(mode==='login'?'signup':'login')}>{mode==='login'?'アカウントの新規作成':'ログインへ戻る'}</button><p className="fine">医療機関の診断に代わるものではありません。</p></div></div>}
+function Auth(){
+ const [mode,setMode]=useState<'login'|'signup'>('login'),[busy,setBusy]=useState(false),[msg,setMsg]=useState('');
+ const [form,setForm]=useState<any>({email:'',password:'',password2:'',role:'player',full_name:'',school_grade:'1',position:'FW',height_cm:'',weight_kg:'',dominant_foot:'right',origin_team:''});
+ async function submit(e:React.FormEvent){
+   e.preventDefault();setBusy(true);setMsg('');
+   if(mode==='signup'&&form.password!==form.password2){setMsg('パスワードが一致しません');setBusy(false);return}
+   if(!/^(?=.*[A-Za-z])(?=.*\d).{8,}$/.test(form.password)){setMsg('パスワードは8文字以上、英字と数字を含めてください');setBusy(false);return}
+   if(mode==='login'){
+     const {error}=await supabase.auth.signInWithPassword({email:form.email,password:form.password});if(error)setMsg(error.message);
+   }else{
+     const metadata:any={role:form.role,full_name:form.full_name};
+     if(form.role==='player')Object.assign(metadata,{school_grade:Number(form.school_grade),position:form.position,height_cm:Number(form.height_cm),weight_kg:Number(form.weight_kg),dominant_foot:form.dominant_foot,origin_team:form.origin_team});
+     const {error}=await supabase.auth.signUp({email:form.email,password:form.password,options:{data:metadata}});
+     setMsg(error?error.message:'登録しました。管理者の承認後に利用できます。');
+   }
+   setBusy(false);
+ }
+ return <div className="authPage"><div className="authCard"><div className="brandBig">KTRS MED</div><div className="sub">FIELD MEDICAL HUB</div><h2>{mode==='login'?'ログイン':'アカウント新規作成'}</h2>
+ <form onSubmit={submit} className="form"><input placeholder="メールアドレス" type="email" required value={form.email} onChange={e=>setForm({...form,email:e.target.value})}/><input placeholder="パスワード" type="password" required value={form.password} onChange={e=>setForm({...form,password:e.target.value})}/>
+ {mode==='signup'&&<><input placeholder="パスワード（確認）" type="password" required value={form.password2} onChange={e=>setForm({...form,password2:e.target.value})}/><input placeholder="氏名" required value={form.full_name} onChange={e=>setForm({...form,full_name:e.target.value})}/><select value={form.role} onChange={e=>setForm({...form,role:e.target.value})}><option value="player">選手</option><option value="staff">スタッフ</option></select>{form.role==='player'&&<div className="grid2"><select value={form.school_grade} onChange={e=>setForm({...form,school_grade:e.target.value})}><option>1</option><option>2</option><option>3</option></select><select value={form.position} onChange={e=>setForm({...form,position:e.target.value})}><option>GK</option><option>DF</option><option>MF</option><option>FW</option></select><input placeholder="身長 cm" type="number" required value={form.height_cm} onChange={e=>setForm({...form,height_cm:e.target.value})}/><input placeholder="体重 kg" type="number" required value={form.weight_kg} onChange={e=>setForm({...form,weight_kg:e.target.value})}/><select value={form.dominant_foot} onChange={e=>setForm({...form,dominant_foot:e.target.value})}><option value="right">右</option><option value="left">左</option><option value="both">両方</option></select><input placeholder="出身チーム" value={form.origin_team} onChange={e=>setForm({...form,origin_team:e.target.value})}/></div>}</>}
+ <button disabled={busy}>{busy?'処理中...':mode==='login'?'ログイン':'登録する'}</button></form>{msg&&<div className="notice">{msg}</div>}<button className="linkBtn" onClick={()=>setMode(mode==='login'?'signup':'login')}>{mode==='login'?'アカウントの新規作成':'ログインへ戻る'}</button><p className="fine">医療機関の診断に代わるものではありません。</p></div></div>;
+}
 
 function Pending({status,reason,onLogout}:{status?:Approval;reason?:string|null;onLogout:()=>void}){return <Center><div className="authCard"><h2>{status==='rejected'?'アカウントは承認されていません':'管理者の承認待ちです'}</h2><p>{status==='rejected'?(reason||'管理者にお問い合わせください。'):'承認後にKTRS MEDを利用できます。'}</p><button onClick={onLogout}>ログアウト</button></div></Center>}
-function Shell({profile,isAdmin,screen,setScreen,onLogout,children}:any){return <><header><div><b>KTRS MED</b><span> FIELD MEDICAL HUB</span></div><nav>{[['players','選手一覧'],['reports','選手報告'],['team','チーム状況'],['case','記録・判断']].map(([k,l])=><button key={k} className={screen===k?'active':''} onClick={()=>setScreen(k)}>{l}</button>)}{isAdmin&&<button className={screen==='admin'?'active':''} onClick={()=>setScreen('admin')}>管理</button>}</nav><div className="user">{profile?.full_name||''}<button onClick={onLogout}>ログアウト</button></div></header><main>{children}</main><footer>© K-TRAINERS. All rights reserved.<br/><span>傷害情報は認証されたサーバーに保存されます。</span></footer></>}
 
-function Players(){const [rows,setRows]=useState<CaseRow[]>([]),[q,setQ]=useState(''),[loading,setLoading]=useState(true); useEffect(()=>{load()},[]); async function load(){const {data}=await supabase.from('active_case_board').select('*').order('updated_at',{ascending:false}); setRows((data||[]) as any);setLoading(false)}; const filtered=useMemo(()=>rows.filter(r=>r.full_name.includes(q)||r.injury_name.includes(q)),[rows,q]); return <section><Title t="選手一覧" s="高校年代サッカー｜メディカル管理"/><div className="cards"><Stat n={rows.filter(r=>r.current_status==='needs_attention').length} l="要対応" c="danger"/><Stat n={rows.filter(r=>r.current_status==='rehab').length} l="リハビリ中" c="info"/><Stat n={rows.filter(r=>r.current_status==='observation').length} l="経過観察" c="warn"/></div><div className="toolbar"><input placeholder="選手名・傷害名で検索" value={q} onChange={e=>setQ(e.target.value)}/></div>{loading?<p>読み込み中...</p>:<div className="tableWrap"><table><thead><tr><th>氏名</th><th>学年/Pos</th><th>傷害</th><th>状態</th><th>更新</th></tr></thead><tbody>{filtered.map(r=><tr key={r.case_id}><td><b>{r.full_name}</b></td><td>{r.school_grade||'-'}年 / {r.position||'-'}</td><td>{r.injury_name}<small>{r.injury_date}・{r.body_part}</small></td><td><span className={'pill '+statusClass[r.current_status]}>{statusLabel[r.current_status]||r.current_status}</span></td><td>{new Date(r.updated_at).toLocaleDateString('ja-JP')}</td></tr>)}</tbody></table>{!filtered.length&&<div className="empty">現在、進行中の傷害ケースはありません。</div>}</div>}</section>}
+function Shell({profile,isAdmin,screen,setScreen,unread,onLogout,children}:any){
+ const nav:[Screen,string][]=[['team','チーム状況'],['reports','選手報告'],['players','選手一覧'],['case','記録・判断']];
+ return <><header><div><b>KTRS MED</b><span> FIELD MEDICAL HUB</span></div><nav>{nav.map(([k,l])=><button key={k} className={(screen===k?'active ':'')+(k==='reports'&&unread>0?'unreadTab':'')} onClick={()=>setScreen(k)}>{l}{k==='reports'&&unread>0&&<em>{unread}</em>}</button>)}{isAdmin&&<button className={screen==='admin'?'active':''} onClick={()=>setScreen('admin')}>管理</button>}</nav><div className="user">{profile?.full_name||''}<button onClick={onLogout}>ログアウト</button></div></header><main>{children}</main><footer>© K-TRAINERS. All rights reserved.<br/><span>傷害情報は認証されたサーバーに保存されます。</span></footer></>;
+}
 
-function Reports({profile}:{profile:Profile|null}){const [rows,setRows]=useState<ReportRow[]>([]),[form,setForm]=useState<any>({injury_date:'',symptom:'',body_part:'',side:'right'}),[msg,setMsg]=useState(''); const staff=profile?.role==='staff'; useEffect(()=>{load()},[]); async function load(){const {data}=await supabase.from('injury_reports').select('id,player_id,injury_date,symptom,body_part,side,review_status,created_at').order('created_at',{ascending:false});setRows((data||[]) as any)} async function submit(e:any){e.preventDefault();if(!profile)return;const {error}=await supabase.from('injury_reports').insert({player_id:profile.id,injury_date:form.injury_date,symptom:form.symptom,body_part:form.body_part,side:form.side,hospital_status:'未受診',review_status:'pending'});setMsg(error?error.message:'報告を送信しました');if(!error){setForm({injury_date:'',symptom:'',body_part:'',side:'right'});load()}} async function convert(id:number){const {error}=await supabase.rpc('staff_convert_report_to_case',{report_id:id});setMsg(error?error.message:'正式な傷害ケースに変換しました');load()}
- return <section><Title t="選手報告" s="選手自己申告 → スタッフ確認"/>{profile?.role==='player'&&<form className="panel form" onSubmit={submit}><h3>新しい傷害・症状を報告</h3><div className="grid2"><input type="date" required value={form.injury_date} onChange={e=>setForm({...form,injury_date:e.target.value})}/><select value={form.side} onChange={e=>setForm({...form,side:e.target.value})}><option value="right">右</option><option value="left">左</option><option value="both">両側</option><option value="none">左右なし</option></select><input placeholder="傷害名または症状" required value={form.symptom} onChange={e=>setForm({...form,symptom:e.target.value})}/><input placeholder="受傷部位" required value={form.body_part} onChange={e=>setForm({...form,body_part:e.target.value})}/></div><button>報告する</button></form>}{msg&&<div className="notice">{msg}</div>}<div className="tableWrap"><table><thead><tr><th>日付</th><th>症状</th><th>部位</th><th>状態</th>{staff&&<th></th>}</tr></thead><tbody>{rows.map(r=><tr key={r.id}><td>{r.injury_date}</td><td>{r.symptom}</td><td>{r.body_part}</td><td>{r.review_status==='pending'?'未確認':'確認済み'}</td>{staff&&<td>{r.review_status==='pending'&&<button onClick={()=>convert(r.id)}>傷害ケース化</button>}</td>}</tr>)}</tbody></table></div></section>}
+function Team({isAdmin}:{isAdmin:boolean}){
+ const [d,setD]=useState<any>(null);
+ useEffect(()=>{supabase.from('team_status_summary').select('*').maybeSingle().then(({data})=>setD(data))},[]);
+ const total=Number(d?.registered_players||0);
+ const pct=(n:any)=>total?Math.round(Number(n||0)*1000/total)/10:0;
+ return <section><Title t="チーム状況" s="登録選手数を基準にした本日のメディカル状況"/><div className="cards">
+ <Stat n={total} l="登録選手" c="info"/>
+ <Stat n={d?.needs_attention||0} l="要対応" c="danger" p={pct(d?.needs_attention)}/>
+ <Stat n={d?.rehab||0} l="リハビリ" c="info" p={pct(d?.rehab)}/>
+ <Stat n={d?.observation||0} l="経過観察" c="warn" p={pct(d?.observation)}/>
+ <Stat n={d?.unavailable_today||0} l="参加不可" c="danger" p={pct(d?.unavailable_today)}/>
+ <Stat n={d?.restricted_today||0} l="制限あり" c="warn" p={pct(d?.restricted_today)}/>
+ </div>{isAdmin&&<div className="adminHint">管理者は「選手一覧」から各選手の対応・参加状況を編集できます。</div>}</section>;
+}
 
-function Team(){const [d,setD]=useState<any>(null);useEffect(()=>{supabase.from('staff_dashboard_summary').select('*').maybeSingle().then(({data})=>setD(data))},[]);return <section><Title t="チーム状況" s="本日のメディカル状況"/><div className="cards"><Stat n={d?.pending_reports||0} l="未確認報告" c="warn"/><Stat n={d?.needs_attention_cases||0} l="要対応" c="danger"/><Stat n={d?.rehab_cases||0} l="リハビリ" c="info"/><Stat n={d?.unavailable_today||0} l="参加不可" c="danger"/><Stat n={d?.modified_today||0} l="制限あり" c="warn"/><Stat n={d?.due_tasks||0} l="期限ToDo" c="info"/></div></section>}
-function Cases(){const [rows,setRows]=useState<CaseRow[]>([]);useEffect(()=>{supabase.from('active_case_board').select('*').order('updated_at',{ascending:false}).then(({data})=>setRows((data||[]) as any))},[]);return <section><Title t="記録・判断支援" s="評価・対応・リハビリ・復帰判断"/><div className="caseGrid">{rows.map(r=><div className="panel" key={r.case_id}><h3>{r.full_name}</h3><p><b>{r.injury_name}</b> / {r.body_part}</p><span className={'pill '+statusClass[r.current_status]}>{statusLabel[r.current_status]||r.current_status}</span><p className="muted">未完了ToDo: {r.open_tasks}件</p></div>)}</div></section>}
-function Admin(){const [rows,setRows]=useState<any[]>([]),[msg,setMsg]=useState('');useEffect(()=>{load()},[]);async function load(){const {data,error}=await supabase.rpc('admin_list_accounts',{filter_status:null});if(!error)setRows(data||[])}async function act(id:string,status:'approved'|'rejected'){const {error}=await supabase.rpc('admin_set_account_approval',{target_user_id:id,new_status:status,reason:status==='rejected'?'管理者により却下':''});setMsg(error?error.message:'更新しました');load()}return <section><Title t="アカウント承認" s="管理者専用"/>{msg&&<div className="notice">{msg}</div>}<div className="tableWrap"><table><thead><tr><th>氏名</th><th>区分</th><th>学年/Pos</th><th>状態</th><th>操作</th></tr></thead><tbody>{rows.map(r=><tr key={r.user_id}><td>{r.full_name}</td><td>{r.role==='player'?'選手':'スタッフ'}</td><td>{r.school_grade?`${r.school_grade}年 / ${r.player_position||'-'}`:'-'}</td><td>{r.status}</td><td>{r.status==='pending'&&<><button onClick={()=>act(r.user_id,'approved')}>承認</button> <button className="secondary" onClick={()=>act(r.user_id,'rejected')}>却下</button></>}</td></tr>)}</tbody></table></div></section>}
+function Players({isAdmin}:{isAdmin:boolean}){
+ const [rows,setRows]=useState<any[]>([]),[loading,setLoading]=useState(true),[msg,setMsg]=useState('');
+ const [filters,setFilters]=useState({name:'',grade:'',position:'',injury:'',status:''});
+ const [edit,setEdit]=useState<any|null>(null);
+ useEffect(()=>{load()},[]);
+ async function load(){const {data,error}=await supabase.from('player_directory').select('*').order('status_order',{ascending:true}).order('school_grade',{ascending:false}).order('full_name',{ascending:true});if(error)setMsg(error.message);setRows(data||[]);setLoading(false)}
+ const positions=Array.from(new Set(rows.map(r=>r.position).filter(Boolean)));
+ const filtered=useMemo(()=>rows.filter(r=>
+   (!filters.name||String(r.full_name||'').includes(filters.name))&&
+   (!filters.grade||String(r.school_grade||'')===filters.grade)&&
+   (!filters.position||r.position===filters.position)&&
+   (!filters.injury||String(r.injury_name||'').includes(filters.injury))&&
+   (!filters.status||r.display_status===filters.status)
+ ),[rows,filters]);
+ async function saveStatus(){
+   if(!edit)return;
+   let err:any=null;
+   if(edit.case_id){const {error}=await supabase.rpc('staff_update_case_status',{case_uuid:edit.case_id,new_status:edit.display_status});err=error}
+   if(!err){const {error}=await supabase.rpc('staff_set_daily_status',{target_player:edit.player_id,new_availability:edit.today_availability,new_pain_score:edit.pain_score||null,new_notes:null});err=error}
+   setMsg(err?err.message:'更新しました');if(!err){setEdit(null);load()}
+ }
+ return <section><Title t="選手一覧" s="要対応 → リハビリ中 → 経過観察 → 問題なし の順で表示"/>
+ <div className="filters"><input placeholder="氏名" value={filters.name} onChange={e=>setFilters({...filters,name:e.target.value})}/><select value={filters.grade} onChange={e=>setFilters({...filters,grade:e.target.value})}><option value="">全学年</option><option value="1">1年</option><option value="2">2年</option><option value="3">3年</option></select><select value={filters.position} onChange={e=>setFilters({...filters,position:e.target.value})}><option value="">全ポジション</option>{positions.map(p=><option key={p}>{p}</option>)}</select><input placeholder="傷害名で検索" value={filters.injury} onChange={e=>setFilters({...filters,injury:e.target.value})}/><select value={filters.status} onChange={e=>setFilters({...filters,status:e.target.value})}><option value="">全対応</option><option value="needs_attention">要対応</option><option value="rehab">リハビリ中</option><option value="observation">経過観察</option><option value="available">問題なし</option></select></div>
+ {msg&&<div className="notice">{msg}</div>}
+ {loading?<p>読み込み中...</p>:<div className="tableWrap"><table><thead><tr><th>氏名</th><th>学年/Pos</th><th>傷害</th><th>対応</th><th>本日</th>{isAdmin&&<th>管理</th>}</tr></thead><tbody>{filtered.map(r=><tr key={r.player_id}><td><b>{r.full_name}</b></td><td>{r.school_grade||'-'}年 / {r.position||'-'}</td><td>{r.injury_name||'なし'}{r.body_part&&<small>{r.body_part}</small>}</td><td><span className={'pill '+statusClass[r.display_status]}>{statusLabel[r.display_status]}</span></td><td>{availabilityLabel[r.today_availability]||'-'}{r.pain_score!=null&&<small>Pain {r.pain_score}/10</small>}</td>{isAdmin&&<td><button onClick={()=>setEdit({...r})}>編集</button></td>}</tr>)}</tbody></table>{!filtered.length&&<div className="empty">該当する選手はいません。</div>}</div>}
+ {isAdmin&&edit&&<div className="panel form"><h3>{edit.full_name}｜対応・参加状況を編集</h3><div className="grid2">{edit.case_id&&<select value={edit.display_status} onChange={e=>setEdit({...edit,display_status:e.target.value})}><option value="needs_attention">要対応</option><option value="rehab">リハビリ中</option><option value="observation">経過観察</option><option value="available">問題なし</option></select>}<select value={edit.today_availability} onChange={e=>setEdit({...edit,today_availability:e.target.value})}><option value="out">参加不可</option><option value="modified">別メニュー</option><option value="partial">部分参加</option><option value="full">通常参加</option></select><input type="number" min="0" max="10" placeholder="Pain 0-10" value={edit.pain_score??''} onChange={e=>setEdit({...edit,pain_score:e.target.value===''?null:Number(e.target.value)})}/></div><div className="actions"><button onClick={saveStatus}>保存</button><button className="secondary" onClick={()=>setEdit(null)}>キャンセル</button></div></div>}
+ </section>;
+}
+
+function Reports({profile,isAdmin}:{profile:Profile|null;isAdmin:boolean}){
+ const [rows,setRows]=useState<any[]>([]),[msg,setMsg]=useState(''),[edit,setEdit]=useState<any|null>(null);
+ const [form,setForm]=useState<any>({injury_date:'',symptom:'',body_part:'',side:'right',activity:'',mechanism:'',hospital_status:'未受診',facility_name:'',visit_date:'',diagnosis:'',instructed_plan:'',notes:''});
+ useEffect(()=>{load()},[]);
+ async function load(){const {data,error}=await supabase.from('injury_reports').select('id,player_id,injury_date,symptom,body_part,side,activity,mechanism,hospital_status,facility_name,visit_date,diagnosis,instructed_plan,notes,review_status,created_at,player_edited_fields,player_last_edited_at').order('created_at',{ascending:false});if(error)setMsg(error.message);setRows(data||[])}
+ async function submit(e:React.FormEvent){e.preventDefault();if(!profile||profile.role!=='player')return;const payload={player_id:profile.id,...form,visit_date:form.visit_date||null,review_status:'pending'};const {error}=await supabase.from('injury_reports').insert(payload);setMsg(error?error.message:'報告を送信しました');if(!error){setForm({injury_date:'',symptom:'',body_part:'',side:'right',activity:'',mechanism:'',hospital_status:'未受診',facility_name:'',visit_date:'',diagnosis:'',instructed_plan:'',notes:''});load()}}
+ async function convert(id:number){const {error}=await supabase.rpc('staff_convert_report_to_case',{report_id:id});setMsg(error?error.message:'正式な傷害ケースに変換しました');if(!error)load()}
+ async function saveEdit(){
+   if(!edit)return;
+   const base={p_report_id:edit.id,p_injury_date:edit.injury_date,p_symptom:edit.symptom,p_body_part:edit.body_part,p_side:edit.side,p_activity:edit.activity||null,p_mechanism:edit.mechanism||null,p_hospital_status:edit.hospital_status||null,p_facility_name:edit.facility_name||null,p_visit_date:edit.visit_date||null,p_diagnosis:edit.diagnosis||null,p_instructed_plan:edit.instructed_plan||null,p_notes:edit.notes||null};
+   let error:any=null;
+   if(profile?.role==='player'){
+     const res=await supabase.rpc('player_update_own_injury_report',base);error=res.error;
+   }else if(isAdmin){
+     const {p_report_id,...p}=base;
+     const payload={injury_date:p.p_injury_date,symptom:p.p_symptom,body_part:p.p_body_part,side:p.p_side,activity:p.p_activity,mechanism:p.p_mechanism,hospital_status:p.p_hospital_status,facility_name:p.p_facility_name,visit_date:p.p_visit_date,diagnosis:p.p_diagnosis,instructed_plan:p.p_instructed_plan,notes:p.p_notes};
+     const res=await supabase.from('injury_reports').update(payload).eq('id',p_report_id);error=res.error;
+   }
+   setMsg(error?error.message:'履歴を更新しました');if(!error){setEdit(null);load()}
+ }
+ const ownCanEdit=(r:any)=>profile?.role==='player'&&r.player_id===profile.id;
+ const changed=(r:any,k:string)=>Array.isArray(r.player_edited_fields)&&r.player_edited_fields.includes(k);
+ return <section><Title t="選手報告" s="新規報告は未読時のみ上部タブが赤く表示されます"/>
+ {profile?.role==='player'&&<form className="panel form" onSubmit={submit}><h3>新しい傷害・症状を報告</h3><ReportFields value={form} setValue={setForm}/><button>報告する</button></form>}
+ {msg&&<div className="notice">{msg}</div>}
+ <div className="tableWrap"><table><thead><tr><th>日付</th><th>症状</th><th>部位</th><th>状態</th><th>編集履歴</th>{(isAdmin||profile?.role==='player')&&<th>操作</th>}</tr></thead><tbody>{rows.map(r=><tr key={r.id}><td className={changed(r,'injury_date')?'changed':''}>{r.injury_date}</td><td className={changed(r,'symptom')?'changed':''}>{r.symptom}</td><td className={changed(r,'body_part')?'changed':''}>{r.body_part}</td><td>{r.review_status==='pending'?'未確認':'確認済み'}</td><td>{r.player_last_edited_at?<span className="changed">選手が変更済み</span>:'-'}</td>{(isAdmin||profile?.role==='player')&&<td>{(isAdmin||ownCanEdit(r))&&<button onClick={()=>setEdit({...r})}>編集</button>} {isAdmin&&r.review_status==='pending'&&<button onClick={()=>convert(r.id)}>ケース化</button>}</td>}</tr>)}</tbody></table></div>
+ {edit&&<div className="panel form editPanel"><h3>傷害履歴を編集</h3><p className="fine">選手本人が変更した項目は保存後、赤文字・赤枠で表示されます。</p><ReportFields value={edit} setValue={setEdit} changedFields={edit.player_edited_fields}/><div className="actions"><button onClick={saveEdit}>保存</button><button className="secondary" onClick={()=>setEdit(null)}>キャンセル</button></div></div>}
+ </section>;
+}
+
+function ReportFields({value,setValue,changedFields=[]}:{value:any;setValue:(v:any)=>void;changedFields?:string[]}){
+ const cls=(k:string)=>changedFields?.includes(k)?'changedField':'';
+ return <div className="grid2"><input className={cls('injury_date')} type="date" required value={value.injury_date||''} onChange={e=>setValue({...value,injury_date:e.target.value})}/><select className={cls('side')} value={value.side||'right'} onChange={e=>setValue({...value,side:e.target.value})}><option value="right">右</option><option value="left">左</option><option value="both">両側</option><option value="none">左右なし</option></select><input className={cls('symptom')} placeholder="傷害名または症状" required value={value.symptom||''} onChange={e=>setValue({...value,symptom:e.target.value})}/><input className={cls('body_part')} placeholder="受傷部位" required value={value.body_part||''} onChange={e=>setValue({...value,body_part:e.target.value})}/><input className={cls('activity')} placeholder="受傷時の活動内容" value={value.activity||''} onChange={e=>setValue({...value,activity:e.target.value})}/><input className={cls('mechanism')} placeholder="受傷機転" value={value.mechanism||''} onChange={e=>setValue({...value,mechanism:e.target.value})}/><select className={cls('hospital_status')} value={value.hospital_status||'未受診'} onChange={e=>setValue({...value,hospital_status:e.target.value})}><option>未受診</option><option>受診済み</option><option>受診予定</option></select><input className={cls('facility_name')} placeholder="医療機関名" value={value.facility_name||''} onChange={e=>setValue({...value,facility_name:e.target.value})}/><input className={cls('visit_date')} type="date" value={value.visit_date||''} onChange={e=>setValue({...value,visit_date:e.target.value})}/><input className={cls('diagnosis')} placeholder="診断名" value={value.diagnosis||''} onChange={e=>setValue({...value,diagnosis:e.target.value})}/><input className={cls('instructed_plan')} placeholder="今後の対応" value={value.instructed_plan||''} onChange={e=>setValue({...value,instructed_plan:e.target.value})}/><input className={cls('notes')} placeholder="備考" value={value.notes||''} onChange={e=>setValue({...value,notes:e.target.value})}/></div>;
+}
+
+function Cases({isAdmin}:{isAdmin:boolean}){
+ const [rows,setRows]=useState<any[]>([]),[msg,setMsg]=useState('');
+ useEffect(()=>{load()},[]);
+ async function load(){const {data}=await supabase.from('active_case_board').select('*').order('updated_at',{ascending:false});setRows(data||[])}
+ async function setStatus(id:string,status:string){const {error}=await supabase.rpc('staff_update_case_status',{case_uuid:id,new_status:status});setMsg(error?error.message:'対応を更新しました');if(!error)load()}
+ return <section><Title t="記録・判断支援" s="評価・対応・リハビリ・復帰判断"/>{msg&&<div className="notice">{msg}</div>}<div className="caseGrid">{rows.map(r=><div className="panel" key={r.case_id}><h3>{r.full_name}</h3><p><b>{r.injury_name}</b> / {r.body_part}</p><span className={'pill '+statusClass[r.current_status]}>{statusLabel[r.current_status]||r.current_status}</span><p className="muted">未完了ToDo: {r.open_tasks}件</p>{isAdmin&&<div className="actions"><select value={r.current_status} onChange={e=>setStatus(r.case_id,e.target.value)}><option value="needs_attention">要対応</option><option value="rehab">リハビリ中</option><option value="observation">経過観察</option><option value="available">問題なし</option></select><button>＋ 記録追加</button></div>}</div>)}</div></section>;
+}
+
+function Admin(){
+ const [rows,setRows]=useState<any[]>([]),[msg,setMsg]=useState(''),[edit,setEdit]=useState<any|null>(null);
+ useEffect(()=>{load()},[]);
+ async function load(){const {data,error}=await supabase.rpc('admin_list_accounts',{filter_status:null});if(error)setMsg(error.message);else setRows(data||[])}
+ async function approval(id:string,status:Approval){const {error}=await supabase.rpc('admin_set_account_approval',{target_user_id:id,new_status:status,reason:status==='rejected'?'管理者により却下':''});setMsg(error?error.message:'承認状態を更新しました');if(!error)load()}
+ async function save(){
+   if(!edit)return;
+   const {error}=await supabase.rpc('admin_update_account_profile',{p_user_id:edit.user_id,p_role:edit.role,p_full_name:edit.full_name,p_birth_date:edit.birth_date||null,p_phone:edit.phone||null,p_origin_team:edit.origin_team||null,p_height_cm:edit.height_cm||null,p_weight_kg:edit.weight_kg||null,p_dominant_foot:edit.dominant_foot||null,p_school_grade:edit.school_grade||null,p_position:edit.player_position||null,p_jersey_number:edit.jersey_number||null});
+   setMsg(error?error.message:'アカウント情報を更新しました');if(!error){setEdit(null);load()}
+ }
+ return <section><Title t="アカウント承認" s="管理者は登録内容を編集できます"/>{msg&&<div className="notice">{msg}</div>}<div className="tableWrap"><table><thead><tr><th>氏名</th><th>メール</th><th>区分</th><th>学年/Pos</th><th>状態</th><th>操作</th></tr></thead><tbody>{rows.map(r=><tr key={r.user_id}><td>{r.full_name}</td><td>{r.email}</td><td>{r.role==='player'?'選手':'スタッフ'}</td><td>{r.school_grade?`${r.school_grade}年 / ${r.player_position||'-'}`:'-'}</td><td><span className={'pill '+(r.status==='approved'?'ok':r.status==='pending'?'warn':'danger')}>{r.status==='approved'?'承認済み':r.status==='pending'?'承認待ち':'却下'}</span></td><td><button onClick={()=>setEdit({...r})}>編集</button> {r.status!=='approved'&&<button onClick={()=>approval(r.user_id,'approved')}>承認</button>} {r.status!=='rejected'&&<button className="secondary" onClick={()=>approval(r.user_id,'rejected')}>却下</button>}</td></tr>)}</tbody></table></div>
+ {edit&&<div className="panel form"><h3>{edit.full_name}｜登録内容を編集</h3><div className="grid2"><input value={edit.full_name||''} placeholder="氏名" onChange={e=>setEdit({...edit,full_name:e.target.value})}/><input value={edit.email||''} disabled title="ログインメールは認証情報のためここでは変更しません"/><select value={edit.role} onChange={e=>setEdit({...edit,role:e.target.value})}><option value="player">選手</option><option value="staff">スタッフ</option></select><input type="date" value={edit.birth_date||''} onChange={e=>setEdit({...edit,birth_date:e.target.value})}/><input placeholder="電話番号" value={edit.phone||''} onChange={e=>setEdit({...edit,phone:e.target.value})}/><input placeholder="出身チーム" value={edit.origin_team||''} onChange={e=>setEdit({...edit,origin_team:e.target.value})}/>{edit.role==='player'&&<><input type="number" placeholder="身長 cm" value={edit.height_cm??''} onChange={e=>setEdit({...edit,height_cm:e.target.value===''?null:Number(e.target.value)})}/><input type="number" placeholder="体重 kg" value={edit.weight_kg??''} onChange={e=>setEdit({...edit,weight_kg:e.target.value===''?null:Number(e.target.value)})}/><select value={edit.dominant_foot||'right'} onChange={e=>setEdit({...edit,dominant_foot:e.target.value})}><option value="right">右利き</option><option value="left">左利き</option><option value="both">両利き</option></select><select value={edit.school_grade||1} onChange={e=>setEdit({...edit,school_grade:Number(e.target.value)})}><option value={1}>1年</option><option value={2}>2年</option><option value={3}>3年</option></select><select value={edit.player_position||'FW'} onChange={e=>setEdit({...edit,player_position:e.target.value})}><option>GK</option><option>DF</option><option>MF</option><option>FW</option></select><input type="number" placeholder="背番号" value={edit.jersey_number??''} onChange={e=>setEdit({...edit,jersey_number:e.target.value===''?null:Number(e.target.value)})}/></>}</div><div className="actions"><button onClick={save}>変更を保存</button><button className="secondary" onClick={()=>setEdit(null)}>キャンセル</button></div></div>}
+ </section>;
+}
+
 function Title({t,s}:{t:string;s:string}){return <div className="title"><h1>{t}</h1><p>{s}</p></div>}
-function Stat({n,l,c}:{n:number;l:string;c:string}){return <div className={'stat '+c}><b>{n}</b><span>{l}</span></div>}
+function Stat({n,l,c,p}:{n:number;l:string;c:string;p?:number}){return <div className={'stat '+c}><div className="statValue"><b>{n}</b>{p!==undefined&&<small>{p}%</small>}</div><span>{l}</span></div>}
 function Center({children}:{children:React.ReactNode}){return <div className="center">{children}</div>}
 
 createRoot(document.getElementById('root')!).render(<React.StrictMode><App/></React.StrictMode>);
