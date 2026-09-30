@@ -31,3 +31,28 @@
 @media(min-width:1200px){.playerMain{padding-left:18px;padding-right:18px}}
 @media(max-width:900px){.playerMain{padding-left:12px;padding-right:12px}}
 @media(max-width:600px){.playerMain{padding-left:8px;padding-right:8px}}
+
+.playerInfoTop{display:flex;align-items:center;gap:16px;margin-bottom:16px}
+.avatar{border-radius:50%;overflow:hidden;background:#eaf2fb;border:2px solid #d5e2ef;display:flex;align-items:center;justify-content:center;color:#54708d;font-weight:700}
+.avatar img{width:100%;height:100%;object-fit:cover}
+.personCell{display:flex;align-items:center;gap:8px}
+.avatarSetting{display:flex;align-items:center;gap:18px;flex-wrap:wrap}
+.chatLayout{display:grid;grid-template-columns:minmax(0,1.7fr) minmax(300px,.8fr);gap:16px;align-items:start}
+.chatHistory{min-height:420px;max-height:70vh;overflow:auto}
+.chatComposer{position:sticky;top:92px}
+.chatComposer label{font-size:12px;font-weight:700;color:#52677b;margin-top:8px}
+.chatComposer select,.chatComposer textarea{width:100%;padding:11px 12px;border:1px solid #d7e0eb;border-radius:10px;background:white}
+.chatBubble{max-width:80%;padding:11px 13px;border-radius:12px;margin:9px 0}
+.chatBubble.mine{margin-left:auto;background:#e9f3ff}
+.chatBubble.theirs{margin-right:auto;background:#f3f6f9}
+.chatMeta{font-size:11px;color:#73869a;margin-bottom:5px}
+.chatFilters{display:grid;grid-template-columns:1.2fr 1.2fr .9fr auto;gap:10px;margin:14px 0}
+.chatFilters select,.chatFilters input{width:100%;padding:10px 12px;border:1px solid #d7e0eb;border-radius:10px;background:white}
+.adminChatRow{padding:13px 0;border-bottom:1px solid #e8eef5}
+.chatPeople{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.chatBody{margin:9px 0;white-space:pre-wrap;line-height:1.6}
+.confirmOverlay{position:fixed;inset:0;background:#10243d66;display:flex;align-items:center;justify-content:center;padding:20px;z-index:50}
+.confirmCard{width:min(560px,100%);background:#fff;border-radius:16px;padding:22px;box-shadow:0 20px 60px #0a254033}
+.confirmMessage{white-space:pre-wrap;border:1px solid #dce5ee;background:#f8fafc;border-radius:10px;padding:14px;min-height:90px}
+@media(max-width:900px){.chatLayout{grid-template-columns:1fr}.chatComposer{position:static}.chatFilters{grid-template-columns:1fr 1fr}}
+@media(max-width:600px){.chatFilters{grid-template-columns:1fr}.chatBubble{max-width:94%}.playerInfoTop{align-items:flex-start}}
