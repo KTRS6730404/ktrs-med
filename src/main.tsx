@@ -275,20 +275,34 @@ function Team({isAdmin}:{isAdmin:boolean}){
  </div>{isAdmin&&<div className="adminHint">管理者は「選手一覧」から各選手の対応・参加状況を編集できます。</div>}</section>;
 }
 
+
 function Players({isAdmin}:{isAdmin:boolean}){
  const [rows,setRows]=useState<any[]>([]),[loading,setLoading]=useState(true),[msg,setMsg]=useState('');
  const [filters,setFilters]=useState({name:'',grade:'',position:'',injury:'',status:''});
  const [edit,setEdit]=useState<any|null>(null);
+ const [selected,setSelected]=useState<string[]>([]);
+ const [showHidden,setShowHidden]=useState(false);
+ const [confirmAction,setConfirmAction]=useState<{kind:'hide'|'show'|'delete';ids:string[];stage:1|2}|null>(null);
  useEffect(()=>{load()},[]);
- async function load(){const [{data,error},{data:ps}]=await Promise.all([supabase.from('player_directory').select('*').order('status_order',{ascending:true}).order('school_grade',{ascending:false}).order('full_name',{ascending:true}),supabase.from('profiles').select('id,avatar_path').eq('role','player')]);if(error)setMsg(error.message);const map=new Map((ps||[]).map((p:any)=>[p.id,p.avatar_path]));setRows((data||[]).map((r:any)=>({...r,avatar_path:map.get(r.player_id)||null})));setLoading(false)}
+ async function load(){
+   const {data,error}=await supabase.from('player_directory').select('*').order('status_order',{ascending:true}).order('school_grade',{ascending:false}).order('full_name',{ascending:true});
+   if(error)setMsg(error.message);
+   setRows(data||[]);setLoading(false);setSelected([]);
+ }
  const positions=Array.from(new Set(rows.map(r=>r.position).filter(Boolean)));
  const filtered=useMemo(()=>rows.filter(r=>
+   (isAdmin?(showHidden?true:!r.is_hidden):!r.is_hidden)&&
    (!filters.name||String(r.full_name||'').includes(filters.name))&&
    (!filters.grade||String(r.school_grade||'')===filters.grade)&&
    (!filters.position||r.position===filters.position)&&
    (!filters.injury||String(r.injury_name||'').includes(filters.injury))&&
    (!filters.status||r.display_status===filters.status)
- ),[rows,filters]);
+ ),[rows,filters,isAdmin,showHidden]);
+ const visibleIds=filtered.map(r=>r.player_id);
+ const allVisibleSelected=visibleIds.length>0&&visibleIds.every(id=>selected.includes(id));
+ const toggleAll=()=>setSelected(allVisibleSelected?selected.filter(id=>!visibleIds.includes(id)):Array.from(new Set([...selected,...visibleIds])));
+ const toggleOne=(id:string)=>setSelected(s=>s.includes(id)?s.filter(x=>x!==id):[...s,id]);
+
  async function saveStatus(){
    if(!edit)return;
    let err:any=null;
@@ -296,11 +310,39 @@ function Players({isAdmin}:{isAdmin:boolean}){
    if(!err){const {error}=await supabase.rpc('staff_set_daily_status',{target_player:edit.player_id,new_availability:edit.today_availability,new_pain_score:edit.pain_score||null,new_notes:null});err=error}
    setMsg(err?err.message:'更新しました');if(!err){setEdit(null);load()}
  }
+
+ function beginAction(kind:'hide'|'show'|'delete',ids:string[]){
+   if(!ids.length)return;
+   setConfirmAction({kind,ids,stage:1});
+ }
+ async function executeAction(){
+   if(!confirmAction)return;
+   const {kind,ids}=confirmAction;
+   if(kind==='delete'){
+     const targets=rows.filter(r=>ids.includes(r.player_id));
+     const {data,error}=await supabase.rpc('admin_delete_players',{p_player_ids:ids});
+     if(error){setMsg(error.message);setConfirmAction(null);return}
+     const paths=targets.map(r=>r.avatar_path).filter(Boolean);
+     if(paths.length)await supabase.storage.from('profile-photos').remove(paths);
+     setMsg(String(Number(data||0))+'名の選手を削除しました。');
+   }else{
+     const hidden=kind==='hide';
+     const {data,error}=await supabase.rpc('admin_set_players_hidden',{p_player_ids:ids,p_hidden:hidden});
+     if(error){setMsg(error.message);setConfirmAction(null);return}
+     setMsg(String(Number(data||0))+'名を'+(hidden?'非表示':'再表示')+'にしました。');
+   }
+   setConfirmAction(null);await load();
+ }
+ const actionLabel=confirmAction?.kind==='delete'?'削除':confirmAction?.kind==='hide'?'非表示':'再表示';
+ const actionTargets=confirmAction?rows.filter(r=>confirmAction.ids.includes(r.player_id)):[];
+
  return <section><Title t="選手一覧" s="要対応 → リハビリ中 → 経過観察 → 問題なし の順で表示"/>
  <div className="filters"><input placeholder="氏名" value={filters.name} onChange={e=>setFilters({...filters,name:e.target.value})}/><select value={filters.grade} onChange={e=>setFilters({...filters,grade:e.target.value})}><option value="">全学年</option><option value="1">1年</option><option value="2">2年</option><option value="3">3年</option></select><select value={filters.position} onChange={e=>setFilters({...filters,position:e.target.value})}><option value="">全ポジション</option>{positions.map(p=><option key={p}>{p}</option>)}</select><input placeholder="傷害名で検索" value={filters.injury} onChange={e=>setFilters({...filters,injury:e.target.value})}/><select value={filters.status} onChange={e=>setFilters({...filters,status:e.target.value})}><option value="">全対応</option><option value="needs_attention">要対応</option><option value="rehab">リハビリ中</option><option value="observation">経過観察</option><option value="available">問題なし</option></select></div>
+ {isAdmin&&<div className="bulkBar"><label><input type="checkbox" checked={showHidden} onChange={e=>setShowHidden(e.target.checked)}/> 非表示の選手を表示</label><span>{selected.length}名選択中</span><button disabled={!selected.length} onClick={()=>beginAction('hide',selected)}>まとめて非表示</button><button className="secondary" disabled={!selected.length} onClick={()=>beginAction('show',selected)}>まとめて再表示</button><button className="dangerBtn" disabled={!selected.length} onClick={()=>beginAction('delete',selected)}>まとめて削除</button></div>}
  {msg&&<div className="notice">{msg}</div>}
- {loading?<p>読み込み中...</p>:<div className="tableWrap"><table><thead><tr><th>氏名</th><th>学年/Pos</th><th>傷害</th><th>対応</th><th>本日</th>{isAdmin&&<th>管理</th>}</tr></thead><tbody>{filtered.map(r=><tr key={r.player_id}><td><div className="personCell"><Avatar path={r.avatar_path} name={r.full_name} size={38}/><b>{r.full_name}</b></div></td><td>{r.school_grade||'-'}年 / {r.position||'-'}</td><td>{r.injury_name||'なし'}{r.body_part&&<small>{r.body_part}</small>}</td><td><span className={'pill '+statusClass[r.display_status]}>{statusLabel[r.display_status]}</span></td><td>{availabilityLabel[r.today_availability]||'-'}{r.pain_score!=null&&<small>Pain {r.pain_score}/10</small>}</td>{isAdmin&&<td><button onClick={()=>setEdit({...r})}>編集</button></td>}</tr>)}</tbody></table>{!filtered.length&&<div className="empty">該当する選手はいません。</div>}</div>}
+ {loading?<p>読み込み中...</p>:<div className="tableWrap"><table><thead><tr>{isAdmin&&<th><input type="checkbox" checked={allVisibleSelected} onChange={toggleAll}/></th>}<th>氏名</th><th>学年/Pos</th><th>傷害</th><th>対応</th><th>本日</th>{isAdmin&&<th>管理</th>}</tr></thead><tbody>{filtered.map(r=><tr key={r.player_id} className={r.is_hidden?'hiddenRow':''}>{isAdmin&&<td><input type="checkbox" checked={selected.includes(r.player_id)} onChange={()=>toggleOne(r.player_id)}/></td>}<td><div className="personCell"><Avatar path={r.avatar_path} name={r.full_name} size={38}/><div><b>{r.full_name}</b>{r.is_hidden&&<small>非表示</small>}</div></div></td><td>{r.school_grade||'-'}年 / {r.position||'-'}</td><td>{r.injury_name||'なし'}{r.body_part&&<small>{r.body_part}</small>}</td><td><span className={'pill '+statusClass[r.display_status]}>{statusLabel[r.display_status]}</span></td><td>{availabilityLabel[r.today_availability]||'-'}{r.pain_score!=null&&<small>Pain {r.pain_score}/10</small>}</td>{isAdmin&&<td><div className="rowActions"><button onClick={()=>setEdit({...r})}>編集</button>{r.is_hidden?<button className="secondary" onClick={()=>beginAction('show',[r.player_id])}>再表示</button>:<button className="secondary" onClick={()=>beginAction('hide',[r.player_id])}>非表示</button>}<button className="dangerBtn" onClick={()=>beginAction('delete',[r.player_id])}>削除</button></div></td>}</tr>)}</tbody></table>{!filtered.length&&<div className="empty">該当する選手はいません。</div>}</div>}
  {isAdmin&&edit&&<div className="panel form"><h3>{edit.full_name}｜対応・参加状況を編集</h3><div className="grid2">{edit.case_id&&<select value={edit.display_status} onChange={e=>setEdit({...edit,display_status:e.target.value})}><option value="needs_attention">要対応</option><option value="rehab">リハビリ中</option><option value="observation">経過観察</option><option value="available">問題なし</option></select>}<select value={edit.today_availability} onChange={e=>setEdit({...edit,today_availability:e.target.value})}><option value="out">参加不可</option><option value="modified">別メニュー</option><option value="partial">部分参加</option><option value="full">通常参加</option></select><input type="number" min="0" max="10" placeholder="Pain 0-10" value={edit.pain_score??''} onChange={e=>setEdit({...edit,pain_score:e.target.value===''?null:Number(e.target.value)})}/></div><div className="actions"><button onClick={saveStatus}>保存</button><button className="secondary" onClick={()=>setEdit(null)}>キャンセル</button></div></div>}
+ {confirmAction&&<div className="confirmOverlay"><div className="confirmCard"><h3>{confirmAction.stage===1?actionLabel+'する選手を確認':'最終確認：'+actionLabel}</h3><div className="confirmList">{actionTargets.map(r=><div key={r.player_id}>{r.full_name}　{r.school_grade||'-'}年 / {r.position||'-'}</div>)}</div>{confirmAction.kind==='delete'?<p className="dangerText">削除すると、ログインアカウント・傷害報告・ケース・フィジカルデータ・チャットなど関連データも削除され、元に戻せません。</p>:<p className="fine">{confirmAction.kind==='hide'?'非表示後もデータとログイン権限は残ります。チーム集計からは除外されます。':'再表示すると通常の選手一覧とチーム集計に戻ります。'}</p>}<div className="actions">{confirmAction.stage===1?<button onClick={()=>setConfirmAction({...confirmAction,stage:2})}>次の確認へ</button>:<button className={confirmAction.kind==='delete'?'dangerBtn':''} onClick={executeAction}>{actionLabel}を確定</button>}<button className="secondary" onClick={()=>setConfirmAction(null)}>キャンセル</button></div></div></div>}
  </section>;
 }
 
