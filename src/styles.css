@@ -61,3 +61,15 @@
 .playerMain>section{margin-top:0!important;padding-top:0}
 .playerMain .title{margin-top:0}
 .playerMain .panel:first-of-type{margin-top:0}
+
+.bulkBar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:12px 0;padding:10px 12px;background:#f6f9fc;border:1px solid #dce6ef;border-radius:12px}
+.bulkBar label{display:flex;align-items:center;gap:6px;margin-right:auto}
+.rowActions{display:flex;gap:6px;flex-wrap:wrap}
+.dangerBtn{background:#b42318!important;color:#fff!important;border-color:#b42318!important}
+.dangerBtn:disabled{opacity:.45;cursor:not-allowed}
+.hiddenRow{opacity:.62;background:#f7f7f7}
+.confirmList{max-height:220px;overflow:auto;border:1px solid #e0e7ef;border-radius:10px;padding:10px;margin:12px 0;background:#fafcff}
+.confirmList>div{padding:7px 4px;border-bottom:1px solid #edf1f5}
+.confirmList>div:last-child{border-bottom:none}
+.dangerText{color:#b42318;font-weight:700;line-height:1.6}
+@media(max-width:700px){.bulkBar{align-items:stretch}.bulkBar label{width:100%;margin-right:0}.bulkBar button{flex:1}}
