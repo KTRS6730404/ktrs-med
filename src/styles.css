@@ -255,3 +255,12 @@ main{max-width:none}
 
 .scheduleOpponentBlock{display:grid;gap:6px}
 .scheduleOpponentBlock input,.scheduleOpponentBlock select{width:100%}
+
+.categorySetGroup{margin-bottom:12px}
+.categorySetSummary{display:grid;gap:6px;cursor:pointer}
+.categorySetSummary>div:first-child{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.categorySetSummary span{font-size:12px;color:#60758a}
+.categoryNamePreview{font-size:12px;color:#7d8b99;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.categorySetBody{padding-top:12px}
+.categoryEditCard{max-width:560px;width:min(92vw,560px)}
+.categoryEditCard label{display:grid;gap:6px}
