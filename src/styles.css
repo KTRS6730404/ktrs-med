@@ -154,3 +154,21 @@ main{max-width:none}
 .gpsManual summary{cursor:pointer;font-weight:700}
 @media(max-width:1100px){.scheduleEntry{grid-template-columns:42px 90px 1fr 100px 1fr}.staffMulti,.scheduleEntry textarea,.scheduleActions{grid-column:span 2}}
 @media(max-width:700px){.scheduleEntry{grid-template-columns:1fr}.scheduleEntryNo,.staffMulti,.scheduleEntry textarea,.scheduleActions{grid-column:auto}}
+
+.gpsChartsTop{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-bottom:14px}
+.gpsChartCard{border:1px solid #dfe7ef;border-radius:12px;background:#fff;padding:12px;min-width:0}
+.gpsChartTitle{display:flex;justify-content:space-between;gap:10px;align-items:flex-start;margin-bottom:6px}
+.gpsChartTitle h4,.gpsChartTitle p{margin:0}
+.gpsChartTitle p{font-size:12px;color:#718096;margin-top:3px}
+.gpsLegend{display:flex;gap:8px;flex-wrap:wrap;font-size:11px;color:#526173}
+.gpsLegend span{display:flex;align-items:center;gap:4px}
+.gpsDot{width:8px;height:8px;border-radius:50%;display:inline-block;background:#3b82f6}
+.dot1{background:#10b981}.dot2{background:#f59e0b}
+.gpsChart{width:100%;height:auto;display:block}
+.gridLine{stroke:#e8eef5;stroke-width:1}.axisLine{stroke:#a8b5c3;stroke-width:1}
+.axisText{font-size:10px;fill:#68788a}
+.gpsSeries{stroke-width:2.5;fill:none}.series0{stroke:#3b82f6}.series1{stroke:#10b981}.series2{stroke:#f59e0b}
+.gpsPoint{stroke:#fff;stroke-width:1.5}.point0{fill:#3b82f6}.point1{fill:#10b981}.point2{fill:#f59e0b}
+.sortHead{background:transparent!important;color:inherit!important;border:none!important;padding:0!important;font:inherit;font-weight:700;cursor:pointer;white-space:nowrap}
+.sortHead:hover{text-decoration:underline}
+@media(max-width:1100px){.gpsChartsTop{grid-template-columns:1fr}}
