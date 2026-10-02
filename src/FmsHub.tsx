@@ -172,7 +172,9 @@ function Gps(){
  const gameMatches=matches.filter((g:any)=>(g.head.activity_type||'Game')==='Game');
  const trMatches=matches.filter((g:any)=>g.head.activity_type==='TR');
  const chartMatches=matches.filter((g:any)=>(!chartRange.from||g.head.session_date>=chartRange.from)&&(!chartRange.to||g.head.session_date<=chartRange.to));
- const weekly=chartMatches.map((g:any)=>{const rows=g.rows;const per10=(k:string)=>rows.reduce((a:any,r:any)=>a+Number(r[k]||0),0)/10;return {key:g.key,label:g.head.session_date.slice(5).replace('-','/')+' '+(g.head.opponent||g.head.session_name||''),total_distance_m:per10('total_distance_m'),sprint_distance_m:per10('sprint_distance_m'),si:per10('si'),hi:per10('hi'),sprint_count:per10('sprint_count'),acceleration_count:per10('acceleration_count'),deceleration_count:per10('deceleration_count')}}).sort((a:any,b:any)=>String(a.key).localeCompare(String(b.key)));
+ const toChartRow=(g:any,mode:'per10'|'avg')=>{const rows=g.rows;const calc=(k:string)=>{const sum=rows.reduce((a:any,r:any)=>a+Number(r[k]||0),0);return mode==='per10'?sum/10:(rows.length?sum/rows.length:0)};return {key:g.key,label:g.head.session_date.slice(5).replace('-','/')+' '+(g.head.opponent||g.head.session_name||''),total_distance_m:calc('total_distance_m'),sprint_distance_m:calc('sprint_distance_m'),si:calc('si'),hi:calc('hi'),sprint_count:calc('sprint_count'),acceleration_count:calc('acceleration_count'),deceleration_count:calc('deceleration_count')}};
+ const gameWeekly=chartMatches.filter((g:any)=>(g.head.activity_type||'Game')==='Game').map((g:any)=>toChartRow(g,'per10')).sort((a:any,b:any)=>String(a.key).localeCompare(String(b.key)));
+ const trWeekly=chartMatches.filter((g:any)=>g.head.activity_type==='TR').map((g:any)=>toChartRow(g,'avg')).sort((a:any,b:any)=>String(a.key).localeCompare(String(b.key)));
  const toggleSort=(key:string)=>setSort(s=>({key,dir:s.key===key&&s.dir==='asc'?'desc':'asc'}));
  const arrow=(key:string)=>sort.key===key?(sort.dir==='asc'?' ▲':' ▼'):'';
  const sortRows=(rows:any[])=>[...rows].sort((a:any,b:any)=>{const av=a[sort.key],bv=b[sort.key];const cmp=typeof av==='string'?String(av||'').localeCompare(String(bv||''),'ja'):Number(av||0)-Number(bv||0);return sort.dir==='asc'?cmp:-cmp});
@@ -187,12 +189,17 @@ function Gps(){
      <b>Knows CSVをここにドラッグ＆ドロップ</b><span>またはクリックしてCSVを選択</span>{importFile&&<strong>{importFile.name}</strong>}
    </label>
    <div className="actions"><button disabled={!importFile||importing} onClick={importKnows}>{importing?'取込中...':'データを取り込む'}</button><button className="secondary" onClick={()=>{setShowImport(false);setImportFile(null)}}>キャンセル</button></div></div>}
-   <div className="panel gpsChartFilters"><div><b>グラフ表示期間</b><small>3つのグラフに共通適用</small></div><label>開始日<input type="date" value={chartRange.from} onChange={e=>setChartRange({...chartRange,from:e.target.value})}/></label><label>終了日<input type="date" value={chartRange.to} onChange={e=>setChartRange({...chartRange,to:e.target.value})}/></label><button className="secondary" onClick={()=>setChartRange({from:'',to:''})}>全期間</button><span>{weekly.length}セッション</span></div>
-   <div className="gpsChartsTop">
-     <MiniLineChart title="Volume" subtitle="10人換算｜総走行距離・スプリント距離" rows={weekly} series={[{key:'total_distance_m',label:'総走行距離',unit:'m'},{key:'sprint_distance_m',label:'スプリント距離',unit:'m'}]}/>
-     <MiniLineChart title="Intensity" subtitle="10人換算｜SI・HI" rows={weekly} series={[{key:'si',label:'SI'},{key:'hi',label:'HI'}]}/>
-     <MiniLineChart title="Actions" subtitle="10人換算｜スプリント・加速・減速" rows={weekly} series={[{key:'sprint_count',label:'スプリント',unit:'回'},{key:'acceleration_count',label:'加速',unit:'回'},{key:'deceleration_count',label:'減速',unit:'回'}]}/>
-   </div>
+   <div className="panel gpsChartFilters"><div><b>グラフ表示期間</b><small>3つのグラフに共通適用</small></div><label>開始日<input type="date" value={chartRange.from} onChange={e=>setChartRange({...chartRange,from:e.target.value})}/></label><label>終了日<input type="date" value={chartRange.to} onChange={e=>setChartRange({...chartRange,to:e.target.value})}/></label><button className="secondary" onClick={()=>setChartRange({from:'',to:''})}>全期間</button><span>Game {gameWeekly.length}件 / TR {trWeekly.length}件</span></div>
+   <div className="gpsChartSection"><div className="gpsChartSectionHead"><h3>Game</h3><span>10人換算</span></div><div className="gpsChartsTop">
+     <MiniLineChart title="Volume" subtitle="Game｜10人換算｜総走行距離・スプリント距離" rows={gameWeekly} series={[{key:'total_distance_m',label:'総走行距離',unit:'m'},{key:'sprint_distance_m',label:'スプリント距離',unit:'m'}]}/>
+     <MiniLineChart title="Intensity" subtitle="Game｜10人換算｜SI・HI" rows={gameWeekly} series={[{key:'si',label:'SI'},{key:'hi',label:'HI'}]}/>
+     <MiniLineChart title="Actions" subtitle="Game｜10人換算｜スプリント・加速・減速" rows={gameWeekly} series={[{key:'sprint_count',label:'スプリント',unit:'回'},{key:'acceleration_count',label:'加速',unit:'回'},{key:'deceleration_count',label:'減速',unit:'回'}]}/>
+   </div></div>
+   <div className="gpsChartSection"><div className="gpsChartSectionHead"><h3>TR</h3><span>参加者平均</span></div><div className="gpsChartsTop">
+     <MiniLineChart title="Volume" subtitle="TR｜参加者平均｜総走行距離・スプリント距離" rows={trWeekly} series={[{key:'total_distance_m',label:'総走行距離',unit:'m'},{key:'sprint_distance_m',label:'スプリント距離',unit:'m'}]}/>
+     <MiniLineChart title="Intensity" subtitle="TR｜参加者平均｜SI・HI" rows={trWeekly} series={[{key:'si',label:'SI'},{key:'hi',label:'HI'}]}/>
+     <MiniLineChart title="Actions" subtitle="TR｜参加者平均｜スプリント・加速・減速" rows={trWeekly} series={[{key:'sprint_count',label:'スプリント',unit:'回'},{key:'acceleration_count',label:'加速',unit:'回'},{key:'deceleration_count',label:'減速',unit:'回'}]}/>
+   </div></div>
    <div className="gpsCategoryList">
    {(['Game','TR'] as const).map(cat=>{const list=cat==='Game'?gameMatches:trMatches;return <details className="panel gpsCategoryCard" key={cat}>
       <summary className="gpsCategorySummary"><b>{cat}</b><span>{list.length}件</span></summary>
