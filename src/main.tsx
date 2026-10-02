@@ -214,20 +214,78 @@ function PlayerPortal({profile,session,onLogout}:{profile:Profile;session:any;on
 }
 
 function PlayerMyPage({profile}:{profile:Profile}){
- const [active,setActive]=useState<any[]>([]),[messages,setMessages]=useState<any[]>([]),[schedule,setSchedule]=useState<any[]>([]);
+ const [active,setActive]=useState<any[]>([]);
+ const [messages,setMessages]=useState<any[]>([]);
+ const [schedule,setSchedule]=useState<any[]>([]);
+ const [gps,setGps]=useState<any|null>(null);
+ const [rehab,setRehab]=useState<any|null>(null);
+
  useEffect(()=>{(async()=>{
-   const today=new Date(); const end=new Date(today); end.setDate(today.getDate()+7);
-   const [{data:a},{data:m},{data:s}]=await Promise.all([
-     supabase.from('injury_cases').select('id,injury_name,body_part,current_status,injury_date,rehab_start_date,rehab_stage').eq('player_id',profile.id).neq('current_status','available').order('injury_date',{ascending:false}),
-     supabase.from('player_messages').select('id,title,body,created_at').eq('player_id',profile.id).order('created_at',{ascending:false}).limit(5),
-     supabase.from('player_schedule').select('id,title,starts_at,ends_at,category').gte('starts_at',today.toISOString()).lt('starts_at',end.toISOString()).order('starts_at',{ascending:true})
-   ]); setActive(a||[]);setMessages(m||[]);setSchedule(s||[]);
+   const today=new Date();const todayIso=today.toISOString().slice(0,10);const end=new Date(today);end.setDate(today.getDate()+7);
+   const {data:cases}=await supabase.from('injury_cases').select('id,injury_name,body_part,current_status,injury_date,rehab_start_date,rehab_stage').eq('player_id',profile.id).neq('current_status','available').order('injury_date',{ascending:false});
+   const caseIds=(cases||[]).map((x:any)=>x.id);
+   const [m,s,g,r]=await Promise.all([
+     supabase.from('player_messages').select('id,title,body,created_at').eq('player_id',profile.id).order('created_at',{ascending:false}).limit(3),
+     supabase.from('player_schedule').select('id,title,starts_at,ends_at,category,entry_label,event_type,opponent,competition_name,location').or('player_id.is.null,player_id.eq.'+profile.id).gte('schedule_date',todayIso).lte('schedule_date',end.toISOString().slice(0,10)).order('schedule_date',{ascending:true}).order('starts_at',{ascending:true}).limit(5),
+     supabase.from('gps_player_metrics').select('id,total_distance_m,hsr_distance_m,sprint_distance_m,sprint_count,max_speed_kmh,created_at,gps_sessions(session_date,session_name,session_type)').eq('player_id',profile.id).order('created_at',{ascending:false}).limit(1).maybeSingle(),
+     caseIds.length?supabase.from('rehab_progress').select('id,case_id,stage_name,progress_percent,next_plan,recorded_at').in('case_id',caseIds).order('recorded_at',{ascending:false}).limit(1).maybeSingle():Promise.resolve({data:null} as any)
+   ]);
+   setActive(cases||[]);setMessages(m.data||[]);setSchedule(s.data||[]);setGps(g.data||null);
+   if(r.data){const ci=(cases||[]).find((x:any)=>x.id===r.data.case_id);setRehab({...r.data,injury_name:ci?.injury_name||''})}else setRehab(null);
  })()},[profile.id]);
- return <section><Title t="マイページ" s="自分の情報と今週の状況を確認できます"/>
- <div className="panel playerInfoCard"><div className="playerInfoTop"><Avatar path={profile.avatar_path} name={profile.full_name} size={92}/><div><h3>選手情報</h3><p className="fine">顔写真は「設定」から登録・変更できます。</p></div></div><div className="infoGrid"><div><span>氏名</span><b>{profile.full_name}</b></div><div><span>学年</span><b>{profile.school_grade||'-'}年</b></div><div><span>ポジション</span><b>{profile.position||'-'}</b></div><div><span>身長 / 体重</span><b>{profile.height_cm||'-'}cm / {profile.weight_kg||'-'}kg</b></div><div><span>利き足</span><b>{profile.dominant_foot==='right'?'右':profile.dominant_foot==='left'?'左':profile.dominant_foot==='both'?'両方':'-'}</b></div><div><span>出身チーム</span><b>{profile.origin_team||'-'}</b></div></div>
- {active.length>0&&<div className="activeInjuries"><h4>現在対応中のケガ</h4>{active.map(x=><div className="miniRow" key={x.id}><span>{x.injury_name} / {x.body_part}</span><span className={'pill '+statusClass[x.current_status]}>{statusLabel[x.current_status]}{x.current_status==='rehab'&&x.rehab_start_date?' / Day '+(Math.floor((new Date().setHours(0,0,0,0)-new Date(x.rehab_start_date+'T00:00:00').setHours(0,0,0,0))/86400000)+1):''}</span></div>)}</div>}</div>
- <div className="panel"><h3>新着メッセージ</h3>{messages.length?messages.map(m=><div className="messageItem" key={m.id}><b>{m.title}</b><p>{m.body||''}</p><small>{new Date(m.created_at).toLocaleDateString('ja-JP')}</small></div>):<div className="empty compact">新着メッセージはありません。</div>}</div>
- <div className="panel"><h3>今週の予定</h3>{schedule.length?schedule.map(s=><div className="scheduleItem" key={s.id}><b>{new Date(s.starts_at).toLocaleDateString('ja-JP',{month:'numeric',day:'numeric',weekday:'short'})}</b><span>{s.title}</span>{s.category&&<small>{s.category}</small>}</div>):<div className="empty compact">今週の予定は登録されていません。</div>}</div>
+
+ const bmi=profile.height_cm&&profile.weight_kg?profile.weight_kg/Math.pow(profile.height_cm/100,2):null;
+ const dominant=profile.dominant_foot==='right'?'右':profile.dominant_foot==='left'?'左':profile.dominant_foot==='both'?'両':'-';
+ const availability=active.some((x:any)=>x.current_status==='needs_attention')?'要対応':active.some((x:any)=>x.current_status==='rehab')?'リハビリ中':active.some((x:any)=>x.current_status==='observation')?'経過観察':'参加可能';
+ const availabilityClass=availability==='参加可能'?'ok':availability==='要対応'?'danger':availability==='リハビリ中'?'info':'warn';
+
+ return <section className="sofaPlayerHome">
+   <div className="playerHeroCard">
+     <div className="playerHeroMain">
+       <Avatar path={profile.avatar_path} name={profile.full_name} size={108}/>
+       <div className="playerHeroIdentity"><div className="playerHeroEyebrow">PLAYER PROFILE</div><h1>{profile.full_name}</h1><div className="playerHeroMeta"><span>{profile.school_grade||'-'}年</span><span>{profile.position||'-'}</span><span>利き足 {dominant}</span></div></div>
+       <div className="playerAvailability"><span>STATUS</span><b className={'pill '+availabilityClass}>{availability}</b></div>
+     </div>
+     <div className="playerQuickStats">
+       <div><span>身長</span><b>{profile.height_cm??'-'}<small>{profile.height_cm?' cm':''}</small></b></div>
+       <div><span>体重</span><b>{profile.weight_kg??'-'}<small>{profile.weight_kg?' kg':''}</small></b></div>
+       <div><span>BMI</span><b>{bmi?bmi.toFixed(1):'-'}</b></div>
+       <div><span>登録番号</span><b>{profile.player_registration_number||'-'}</b></div>
+     </div>
+   </div>
+
+   <div className="playerHomeGrid">
+     <div className="playerHomeMain">
+       <div className="panel sofaSection">
+         <div className="sofaSectionHead"><div><span className="sectionKicker">PERFORMANCE</span><h3>最新GPS</h3></div>{gps?.gps_sessions?.session_date&&<small>{gps.gps_sessions.session_date}</small>}</div>
+         {gps?<div className="sofaStatGrid">
+           <div><span>総走行距離</span><b>{gps.total_distance_m??'-'}</b><small>m</small></div>
+           <div><span>HSR</span><b>{gps.hsr_distance_m??'-'}</b><small>m</small></div>
+           <div><span>スプリント距離</span><b>{gps.sprint_distance_m??'-'}</b><small>m</small></div>
+           <div><span>スプリント</span><b>{gps.sprint_count??'-'}</b><small>回</small></div>
+           <div><span>最高速度</span><b>{gps.max_speed_kmh??'-'}</b><small>km/h</small></div>
+         </div>:<div className="empty compact">GPSデータはまだありません。</div>}
+       </div>
+
+       <div className="panel sofaSection">
+         <div className="sofaSectionHead"><div><span className="sectionKicker">MEDICAL</span><h3>コンディション</h3></div></div>
+         {active.length?<div className="sofaMedicalList">{active.map((x:any)=><div className="sofaMedicalRow" key={x.id}><div><b>{x.injury_name}</b><span>{x.body_part} ・ {new Date(x.injury_date+'T00:00:00').toLocaleDateString('ja-JP')}</span></div><span className={'pill '+statusClass[x.current_status]}>{statusLabel[x.current_status]}{x.current_status==='rehab'&&x.rehab_start_date?' / Day '+(Math.floor((new Date().setHours(0,0,0,0)-new Date(x.rehab_start_date+'T00:00:00').setHours(0,0,0,0))/86400000)+1):''}</span></div>)}</div>:<div className="sofaHealthy"><b>✓ 現在対応中の傷害なし</b><span>通常参加可能</span></div>}
+         {rehab&&<div className="rehabSnapshot"><div><span>最新リハビリ</span><b>{rehab.injury_name||'リハビリ'} ・ {rehab.stage_name||'Stage'}</b></div>{rehab.progress_percent!=null&&<strong>{rehab.progress_percent}%</strong>}</div>}
+       </div>
+     </div>
+
+     <div className="playerHomeSide">
+       <div className="panel sofaSection">
+         <div className="sofaSectionHead"><div><span className="sectionKicker">SCHEDULE</span><h3>次の予定</h3></div></div>
+         {schedule.length?<div className="sofaScheduleList">{schedule.map((s:any)=><div className="sofaScheduleRow" key={s.id}><div className="sofaDateBox"><b>{new Date(s.starts_at||s.schedule_date).getDate()}</b><span>{new Date(s.starts_at||s.schedule_date).toLocaleDateString('ja-JP',{month:'short'})}</span></div><div><b>{s.entry_label||s.title||s.event_type||'-'}</b>{s.event_type==='Game'&&s.opponent&&<span>vs {s.opponent}</span>}{s.competition_name&&<small>{s.competition_name}</small>}{s.location&&<small>{s.location}</small>}</div></div>)}</div>:<div className="empty compact">今週の予定はありません。</div>}
+       </div>
+
+       <div className="panel sofaSection">
+         <div className="sofaSectionHead"><div><span className="sectionKicker">INFO</span><h3>お知らせ</h3></div></div>
+         {messages.length?<div className="sofaMessageList">{messages.map((m:any)=><div className="sofaMessageRow" key={m.id}><b>{m.title}</b><p>{m.body||''}</p><small>{new Date(m.created_at).toLocaleDateString('ja-JP')}</small></div>)}</div>:<div className="empty compact">新着のお知らせはありません。</div>}
+       </div>
+     </div>
+   </div>
  </section>;
 }
 
