@@ -516,8 +516,8 @@ function CategorySettings({profile}:{profile:Profile|null}){
  }
 
  function list(kind:'schedule'|'competition',rows:any[],value:string,setValue:(v:string)=>void){
-   const title=kind==='schedule'?'Schedule Category一覧':'Competition一覧';
-   const placeholder=kind==='schedule'?'新しいSchedule Category':'新しいCompetition';
+   const title=kind==='schedule'?'Team Category一覧':'Competition一覧';
+   const placeholder=kind==='schedule'?'新しいTeam Category':'新しいCompetition';
    return <details className="panel categorySetGroup">
      <summary className="categorySetSummary"><div><b>{title}</b><span>{rows.length}件</span></div><div className="categoryNamePreview">{rows.length?rows.map((r:any)=>r.name).join(' / '):'未登録'}</div></summary>
      <div className="categorySetBody">
@@ -527,12 +527,12 @@ function CategorySettings({profile}:{profile:Profile|null}){
    </details>
  }
 
- return <section><Title t="SET / Categorys" s="Schedule CategoryとCompetitionをまとめて管理"/>
+ return <section><Title t="SET / Categorys" s="Team CategoryとCompetitionをまとめて管理"/>
    {msg&&<div className="notice">{msg}</div>}
    {list('schedule',scheduleRows,scheduleName,setScheduleName)}
    {list('competition',competitionRows,competitionName,setCompetitionName)}
    {edit&&<div className="confirmOverlay" onClick={()=>setEdit(null)}><div className="confirmCard categoryEditCard" onClick={e=>e.stopPropagation()}>
-     <h3>{edit.kind==='schedule'?'Schedule Category':'Competition'} 編集</h3>
+     <h3>{edit.kind==='schedule'?'Team Category':'Competition'} 編集</h3>
      <label>名称<input value={edit.name} onChange={e=>setEdit({...edit,name:e.target.value})}/></label>
      <div className="actions"><button onClick={saveEdit}>変更を保存</button><button className="secondary" onClick={toggleHidden}>{edit.row.is_active?'非表示':'再表示'}</button><button className="dangerBtn" onClick={deleteItem}>削除</button><button className="secondary" onClick={()=>setEdit(null)}>キャンセル</button></div>
    </div></div>}
