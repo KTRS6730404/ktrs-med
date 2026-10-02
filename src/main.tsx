@@ -360,10 +360,12 @@ function PlayerSettings({profile,session}:{profile:Profile;session:any}){
 
 function AvatarCropper({file,onCancel,onSave}:{file:File;onCancel:()=>void;onSave:(blob:Blob)=>void|Promise<void>}){
  const [url,setUrl]=useState('');
- const [imgSize,setImgSize]=useState({w:0,h:0,nw:0,nh:0});
- const [crop,setCrop]=useState({x:80,y:80,size:160});
- const [drag,setDrag]=useState<{dx:number;dy:number}|null>(null);
+ const [natural,setNatural]=useState({w:0,h:0});
+ const [zoom,setZoom]=useState(1);
+ const [offset,setOffset]=useState({x:0,y:0});
+ const [drag,setDrag]=useState<{x:number;y:number;ox:number;oy:number}|null>(null);
  const stage=320;
+ const cropSize=180;
 
  useEffect(()=>{
    const u=URL.createObjectURL(file);setUrl(u);
@@ -372,35 +374,50 @@ function AvatarCropper({file,onCancel,onSave}:{file:File;onCancel:()=>void;onSav
 
  function ready(e:React.SyntheticEvent<HTMLImageElement>){
    const img=e.currentTarget;
-   const scale=Math.min(stage/img.naturalWidth,stage/img.naturalHeight);
-   const w=img.naturalWidth*scale,h=img.naturalHeight*scale;
-   const size=Math.max(80,Math.min(180,Math.min(w,h)*0.72));
-   const ox=(stage-w)/2,oy=(stage-h)/2;
-   setImgSize({w,h,nw:img.naturalWidth,nh:img.naturalHeight});
-   setCrop({x:ox+(w-size)/2,y:oy+(h-size)/2,size});
+   setNatural({w:img.naturalWidth,h:img.naturalHeight});
+   setZoom(1);
+   setOffset({x:0,y:0});
+ }
+
+ const baseScale=natural.w&&natural.h?Math.max(cropSize/natural.w,cropSize/natural.h):1;
+ const displayW=natural.w*baseScale*zoom;
+ const displayH=natural.h*baseScale*zoom;
+ const centerX=stage/2+offset.x;
+ const centerY=stage/2+offset.y;
+
+ function clampOffset(nx:number,ny:number,z=zoom){
+   if(!natural.w||!natural.h)return {x:nx,y:ny};
+   const w=natural.w*baseScale*z,h=natural.h*baseScale*z;
+   const maxX=Math.max(0,(w-cropSize)/2);
+   const maxY=Math.max(0,(h-cropSize)/2);
+   return {x:Math.max(-maxX,Math.min(maxX,nx)),y:Math.max(-maxY,Math.min(maxY,ny))};
  }
  function pointerDown(e:React.PointerEvent<HTMLDivElement>){
    e.currentTarget.setPointerCapture(e.pointerId);
-   const rect=e.currentTarget.getBoundingClientRect();
-   setDrag({dx:e.clientX-rect.left-crop.x,dy:e.clientY-rect.top-crop.y});
+   setDrag({x:e.clientX,y:e.clientY,ox:offset.x,oy:offset.y});
  }
  function pointerMove(e:React.PointerEvent<HTMLDivElement>){
-   if(!drag||!imgSize.w)return;
-   const rect=e.currentTarget.getBoundingClientRect();
-   const ox=(stage-imgSize.w)/2,oy=(stage-imgSize.h)/2;
-   const maxX=ox+imgSize.w-crop.size,maxY=oy+imgSize.h-crop.size;
-   const x=Math.max(ox,Math.min(maxX,e.clientX-rect.left-drag.dx));
-   const y=Math.max(oy,Math.min(maxY,e.clientY-rect.top-drag.dy));
-   setCrop(v=>({...v,x,y}));
+   if(!drag)return;
+   const next=clampOffset(drag.ox+(e.clientX-drag.x),drag.oy+(e.clientY-drag.y));
+   setOffset(next);
  }
  function pointerUp(){setDrag(null)}
+ function changeZoom(v:number){
+   const z=Math.max(1,Math.min(3,v));
+   setZoom(z);
+   setOffset(o=>clampOffset(o.x,o.y,z));
+ }
  async function save(){
    const img=document.querySelector('#avatarCropImage') as HTMLImageElement|null;
-   if(!img||!imgSize.w)return;
-   const ox=(stage-imgSize.w)/2,oy=(stage-imgSize.h)/2;
-   const sx=(crop.x-ox)/imgSize.w*img.naturalWidth;
-   const sy=(crop.y-oy)/imgSize.h*img.naturalHeight;
-   const ss=crop.size/imgSize.w*img.naturalWidth;
+   if(!img||!natural.w)return;
+   const scale=baseScale*zoom;
+   const imageLeft=stage/2+offset.x-displayW/2;
+   const imageTop=stage/2+offset.y-displayH/2;
+   const cropLeft=stage/2-cropSize/2;
+   const cropTop=stage/2-cropSize/2;
+   const sx=(cropLeft-imageLeft)/scale;
+   const sy=(cropTop-imageTop)/scale;
+   const ss=cropSize/scale;
    const canvas=document.createElement('canvas');canvas.width=512;canvas.height=512;
    const ctx=canvas.getContext('2d');if(!ctx)return;
    ctx.drawImage(img,sx,sy,ss,ss,0,0,512,512);
@@ -408,13 +425,14 @@ function AvatarCropper({file,onCancel,onSave}:{file:File;onCancel:()=>void;onSav
  }
  return <div className="confirmOverlay"><div className="confirmCard cropCard">
    <h3>顔写真の表示範囲を調整</h3>
-   <p className="fine">円をドラッグして、プロフィールに表示する位置を選択してください。</p>
-   <div className="avatarCropStage" onPointerMove={pointerMove} onPointerUp={pointerUp} onPointerCancel={pointerUp}>
-     {url&&<img id="avatarCropImage" src={url} alt="切り抜き対象" onLoad={ready}/>}
-     <div className="avatarCropMask" style={{left:crop.x,top:crop.y,width:crop.size,height:crop.size}} onPointerDown={pointerDown}></div>
+   <p className="fine">画像をドラッグして位置を調整し、スライダーで拡大・縮小できます。</p>
+   <div className="avatarCropStage" onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerUp} onPointerCancel={pointerUp}>
+     {url&&<img id="avatarCropImage" src={url} alt="切り抜き対象" onLoad={ready} style={{width:displayW||'auto',height:displayH||'auto',left:centerX,top:centerY,transform:'translate(-50%,-50%)'}}/>}
+     <div className="avatarCropFixedCircle" style={{width:cropSize,height:cropSize}}></div>
    </div>
-   <div className="cropPreviewRow"><span>プレビュー</span><div className="cropPreview" style={{width:88,height:88}}>{url&&imgSize.w>0&&<div style={{width:crop.size,height:crop.size,transform:`scale(${88/crop.size})`,transformOrigin:'top left',position:'relative',overflow:'hidden',borderRadius:'50%'}}><img src={url} alt="" style={{position:'absolute',width:imgSize.w,height:imgSize.h,left:-crop.x+(stage-imgSize.w)/2,top:-crop.y+(stage-imgSize.h)/2}}/></div>}</div></div>
-   <div className="actions"><button onClick={save}>この範囲で保存</button><button className="secondary" onClick={onCancel}>キャンセル</button></div>
+   <div className="cropZoomRow"><span>縮小</span><input type="range" min="1" max="3" step="0.01" value={zoom} onChange={e=>changeZoom(Number(e.target.value))}/><span>拡大</span><b>{Math.round(zoom*100)}%</b></div>
+   <div className="cropPreviewRow"><span>プレビュー</span><div className="cropPreview" style={{width:88,height:88}}>{url&&natural.w>0&&<div style={{width:88,height:88,overflow:'hidden',borderRadius:'50%',position:'relative'}}><img src={url} alt="" style={{position:'absolute',width:displayW*88/cropSize,height:displayH*88/cropSize,left:(cropSize/2-(stage/2+offset.x-displayW/2))*88/cropSize,top:(cropSize/2-(stage/2+offset.y-displayH/2))*88/cropSize,transform:'translate(-50%,-50%)'}}/></div>}</div></div>
+   <div className="actions"><button onClick={save}>この範囲で保存</button><button className="secondary" onClick={()=>{setZoom(1);setOffset({x:0,y:0})}}>位置・大きさをリセット</button><button className="secondary" onClick={onCancel}>キャンセル</button></div>
  </div></div>;
 }
 
