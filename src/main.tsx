@@ -309,7 +309,7 @@ function StaffChat({profile,isAdmin}:{profile:Profile|null;isAdmin:boolean}){
  {msg&&<div className="notice">{msg}</div>}</section>;
 }
 
-function ModulePlaceholder({title,text}:{title:string;text:string}){return <section><Title t={title} s={text}/><div className="panel"><h3>画面構成を準備済み</h3><p>{text}</p><p className="fine">既存データ構造を壊さず、このメニュー配下に機能を追加できる状態にしています。</p></div></section>}
+function ModulePlaceholder({title}:{title:string;text:string}){return <section><Title t={title}/><div className="panel"><h3>画面構成を準備済み</h3></div></section>}
 
 function DirectoryView({mode,isAdmin}:{mode:'staff'|'teams';isAdmin:boolean}){
  const [rows,setRows]=useState<any[]>([]),[edit,setEdit]=useState<any|null>(null),[deleteTarget,setDeleteTarget]=useState<any|null>(null),[deleteStage,setDeleteStage]=useState<1|2>(1),[msg,setMsg]=useState('');
@@ -472,7 +472,7 @@ function Players({isAdmin}:{isAdmin:boolean}){
  const actionLabel=confirmAction?.kind==='delete'?'削除':confirmAction?.kind==='hide'?'非表示':'再表示';
  const actionTargets=confirmAction?rows.filter(r=>confirmAction.ids.includes(r.player_id)):[];
 
- return <section><Title t="選手一覧" s="要対応 → リハビリ中 → 経過観察 → 問題なし の順で表示"/>
+ return <section><Title t="TEAM / Players" s=""/>
  <div className="filters"><input placeholder="氏名" value={filters.name} onChange={e=>setFilters({...filters,name:e.target.value})}/><select value={filters.grade} onChange={e=>setFilters({...filters,grade:e.target.value})}><option value="">全学年</option><option value="1">1年</option><option value="2">2年</option><option value="3">3年</option></select><select value={filters.position} onChange={e=>setFilters({...filters,position:e.target.value})}><option value="">全ポジション</option>{positions.map(p=><option key={p}>{p}</option>)}</select><input placeholder="傷害名で検索" value={filters.injury} onChange={e=>setFilters({...filters,injury:e.target.value})}/><select value={filters.status} onChange={e=>setFilters({...filters,status:e.target.value})}><option value="">全対応</option><option value="needs_attention">要対応</option><option value="rehab">リハビリ中</option><option value="observation">経過観察</option><option value="available">問題なし</option></select></div>
  {isAdmin&&<div className="bulkBar"><label><input type="checkbox" checked={showHidden} onChange={e=>setShowHidden(e.target.checked)}/> 非表示の選手を表示</label><span>{selected.length}名選択中</span><button disabled={!selected.length} onClick={()=>beginAction('hide',selected)}>まとめて非表示</button><button className="secondary" disabled={!selected.length} onClick={()=>beginAction('show',selected)}>まとめて再表示</button><button className="dangerBtn" disabled={!selected.length} onClick={()=>beginAction('delete',selected)}>まとめて削除</button></div>}
  {msg&&<div className="notice">{msg}</div>}
@@ -557,7 +557,7 @@ function AdminPhysicalBulk(){
  return <div className="panel"><h3>フィジカルデータ｜カテゴリー一括入力</h3><p className="fine">測定項目は仮設定です。後ほど正式な項目へ変更できます。</p><div className="filters"><input value={category} onChange={e=>setCategory(e.target.value)} placeholder="測定カテゴリー"/><select value={grade} onChange={e=>setGrade(e.target.value)}><option value="">全学年</option><option value="1">1年</option><option value="2">2年</option><option value="3">3年</option></select><select value={position} onChange={e=>setPosition(e.target.value)}><option value="">全ポジション</option><option>GK</option><option>DF</option><option>MF</option><option>FW</option></select><input type="date" value={date} onChange={e=>setDate(e.target.value)}/></div><div className="tableWrap"><table><thead><tr><th>選手</th><th>学年/Pos</th>{axes.map(a=><th key={a}>{a}</th>)}</tr></thead><tbody>{filtered.map(p=><tr key={p.id}><td><b>{p.full_name}</b></td><td>{p.school_grade||'-'}年 / {p.position||'-'}</td>{axes.map(a=><td key={a}><input className="bulkInput" type="number" step="0.01" value={values[p.id]?.[a]||''} onChange={e=>setVal(p.id,a,e.target.value)}/></td>)}</tr>)}</tbody></table></div><div className="actions"><button onClick={saveAll}>表示中の選手をまとめて保存</button></div>{msg&&<div className="notice">{msg}</div>}</div>;
 }
 
-function Title({t,s}:{t:string;s:string}){return <div className="title"><h1>{t}</h1><p>{s}</p></div>}
+function Title({t}:{t:string;s?:string}){return <div className="title"><h1>{t}</h1></div>}
 function Stat({n,l,c,p}:{n:number;l:string;c:string;p?:number}){return <div className={'stat '+c}><div className="statValue"><b>{n}</b>{p!==undefined&&<small>{p}%</small>}</div><span>{l}</span></div>}
 function Center({children}:{children:React.ReactNode}){return <div className="center">{children}</div>}
 
