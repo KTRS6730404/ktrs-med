@@ -337,25 +337,85 @@ function RadarPlaceholder({axes}:{axes:string[]}){
 }
 
 function PlayerSettings({profile,session}:{profile:Profile;session:any}){
- const [form,setForm]=useState<any>({...profile,birth_date:'',phone:''}),[email,setEmail]=useState(session?.user?.email||''),[password,setPassword]=useState(''),[msg,setMsg]=useState(''),[uploading,setUploading]=useState(false);
+ const [form,setForm]=useState<any>({...profile,birth_date:'',phone:''}),[email,setEmail]=useState(session?.user?.email||''),[password,setPassword]=useState(''),[msg,setMsg]=useState(''),[uploading,setUploading]=useState(false),[cropFile,setCropFile]=useState<File|null>(null);
  useEffect(()=>{supabase.from('profiles').select('full_name,birth_date,phone,origin_team,height_cm,weight_kg,dominant_foot,school_grade,position,avatar_path').eq('id',profile.id).maybeSingle().then(({data})=>data&&setForm(data))},[profile.id]);
  async function saveProfile(){const {error}=await supabase.from('profiles').update({full_name:form.full_name,birth_date:form.birth_date||null,phone:form.phone||null,origin_team:form.origin_team||null,height_cm:form.height_cm||null,weight_kg:form.weight_kg||null,dominant_foot:form.dominant_foot||null,school_grade:form.school_grade||null,position:form.position||null}).eq('id',profile.id);setMsg(error?error.message:'基本情報を保存しました。')}
- async function uploadAvatar(file:File){
+ async function uploadCroppedAvatar(blob:Blob){
    setUploading(true);setMsg('');
-   if(!file.type.startsWith('image/')){setMsg('画像ファイルを選択してください。');setUploading(false);return}
-   if(file.size>5*1024*1024){setMsg('画像は5MB以下にしてください。');setUploading(false);return}
-   const ext=(file.name.split('.').pop()||'jpg').toLowerCase();
-   const path=`${profile.id}/avatar.${ext}`;
-   const {error:upErr}=await supabase.storage.from('profile-photos').upload(path,file,{upsert:true,contentType:file.type});
+   const path=`${profile.id}/avatar.jpg`;
+   const {error:upErr}=await supabase.storage.from('profile-photos').upload(path,blob,{upsert:true,contentType:'image/jpeg'});
    if(upErr){setMsg(upErr.message);setUploading(false);return}
    const {error:pErr}=await supabase.from('profiles').update({avatar_path:path}).eq('id',profile.id);
-   setMsg(pErr?pErr.message:'顔写真を更新しました。');if(!pErr)setForm({...form,avatar_path:path});setUploading(false);
+   setMsg(pErr?pErr.message:'顔写真の切り抜きを保存しました。');
+   if(!pErr)setForm({...form,avatar_path:path});
+   setCropFile(null);setUploading(false);
  }
  async function saveAuth(){let error:any=null;if(email&&email!==session?.user?.email){const r=await supabase.auth.updateUser({email});error=r.error}if(!error&&password){const r=await supabase.auth.updateUser({password});error=r.error}setMsg(error?error.message:'ログイン情報を更新しました。');if(!error)setPassword('')}
  return <section><Title t="設定" s="顔写真・身体情報・経歴・ログイン情報を変更できます"/>
- <div className="panel form"><h3>顔写真</h3><div className="avatarSetting"><Avatar path={form.avatar_path} name={form.full_name||profile.full_name} size={112}/><div><input type="file" accept="image/jpeg,image/png,image/webp" onChange={e=>{const file=e.target.files?.[0];if(file)uploadAvatar(file)}}/><p className="fine">JPEG・PNG・WebP、5MB以下。本人とスタッフ／管理者のみ閲覧できます。</p>{uploading&&<span className="fine">アップロード中...</span>}</div></div></div>
+ <div className="panel form"><h3>顔写真</h3><div className="avatarSetting"><Avatar path={form.avatar_path} name={form.full_name||profile.full_name} size={112}/><div><input type="file" accept="image/jpeg,image/png,image/webp" onChange={e=>{const file=e.target.files?.[0];if(!file)return;if(file.size>5*1024*1024){setMsg('画像は5MB以下にしてください。');return}setCropFile(file)}}/><p className="fine">JPEG・PNG・WebP、5MB以下。選択後に表示範囲を調整できます。</p>{uploading&&<span className="fine">アップロード中...</span>}</div></div></div>{cropFile&&<AvatarCropper file={cropFile} onCancel={()=>setCropFile(null)} onSave={uploadCroppedAvatar}/>} 
  <div className="panel form"><h3>身体情報・経歴</h3><div className="grid2"><input placeholder="氏名" value={form.full_name||''} onChange={e=>setForm({...form,full_name:e.target.value})}/><input type="date" value={form.birth_date||''} onChange={e=>setForm({...form,birth_date:e.target.value})}/><input placeholder="電話番号" value={form.phone||''} onChange={e=>setForm({...form,phone:e.target.value})}/><input placeholder="出身チーム" value={form.origin_team||''} onChange={e=>setForm({...form,origin_team:e.target.value})}/><input type="number" placeholder="身長 cm" value={form.height_cm??''} onChange={e=>setForm({...form,height_cm:e.target.value===''?null:Number(e.target.value)})}/><input type="number" placeholder="体重 kg" value={form.weight_kg??''} onChange={e=>setForm({...form,weight_kg:e.target.value===''?null:Number(e.target.value)})}/><select value={form.dominant_foot||'right'} onChange={e=>setForm({...form,dominant_foot:e.target.value})}><option value="right">右利き</option><option value="left">左利き</option><option value="both">両利き</option></select><select value={form.school_grade||1} onChange={e=>setForm({...form,school_grade:Number(e.target.value)})}><option value={1}>1年</option><option value={2}>2年</option><option value={3}>3年</option></select><select value={form.position||'FW'} onChange={e=>setForm({...form,position:e.target.value})}><option>GK</option><option>DF</option><option>MF</option><option>FW</option></select></div><button onClick={saveProfile}>基本情報を保存</button></div>
  <div className="panel form"><h3>ID・パスワード</h3><input type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="ログインID（メール）"/><input type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="新しいパスワード（8文字以上・英数字）"/><button onClick={saveAuth}>ログイン情報を変更</button></div>{msg&&<div className="notice">{msg}</div>}</section>;
+}
+
+
+function AvatarCropper({file,onCancel,onSave}:{file:File;onCancel:()=>void;onSave:(blob:Blob)=>void|Promise<void>}){
+ const [url,setUrl]=useState('');
+ const [imgSize,setImgSize]=useState({w:0,h:0,nw:0,nh:0});
+ const [crop,setCrop]=useState({x:80,y:80,size:160});
+ const [drag,setDrag]=useState<{dx:number;dy:number}|null>(null);
+ const stage=320;
+
+ useEffect(()=>{
+   const u=URL.createObjectURL(file);setUrl(u);
+   return()=>URL.revokeObjectURL(u);
+ },[file]);
+
+ function ready(e:React.SyntheticEvent<HTMLImageElement>){
+   const img=e.currentTarget;
+   const scale=Math.min(stage/img.naturalWidth,stage/img.naturalHeight);
+   const w=img.naturalWidth*scale,h=img.naturalHeight*scale;
+   const size=Math.max(80,Math.min(180,Math.min(w,h)*0.72));
+   const ox=(stage-w)/2,oy=(stage-h)/2;
+   setImgSize({w,h,nw:img.naturalWidth,nh:img.naturalHeight});
+   setCrop({x:ox+(w-size)/2,y:oy+(h-size)/2,size});
+ }
+ function pointerDown(e:React.PointerEvent<HTMLDivElement>){
+   e.currentTarget.setPointerCapture(e.pointerId);
+   const rect=e.currentTarget.getBoundingClientRect();
+   setDrag({dx:e.clientX-rect.left-crop.x,dy:e.clientY-rect.top-crop.y});
+ }
+ function pointerMove(e:React.PointerEvent<HTMLDivElement>){
+   if(!drag||!imgSize.w)return;
+   const rect=e.currentTarget.getBoundingClientRect();
+   const ox=(stage-imgSize.w)/2,oy=(stage-imgSize.h)/2;
+   const maxX=ox+imgSize.w-crop.size,maxY=oy+imgSize.h-crop.size;
+   const x=Math.max(ox,Math.min(maxX,e.clientX-rect.left-drag.dx));
+   const y=Math.max(oy,Math.min(maxY,e.clientY-rect.top-drag.dy));
+   setCrop(v=>({...v,x,y}));
+ }
+ function pointerUp(){setDrag(null)}
+ async function save(){
+   const img=document.querySelector('#avatarCropImage') as HTMLImageElement|null;
+   if(!img||!imgSize.w)return;
+   const ox=(stage-imgSize.w)/2,oy=(stage-imgSize.h)/2;
+   const sx=(crop.x-ox)/imgSize.w*img.naturalWidth;
+   const sy=(crop.y-oy)/imgSize.h*img.naturalHeight;
+   const ss=crop.size/imgSize.w*img.naturalWidth;
+   const canvas=document.createElement('canvas');canvas.width=512;canvas.height=512;
+   const ctx=canvas.getContext('2d');if(!ctx)return;
+   ctx.drawImage(img,sx,sy,ss,ss,0,0,512,512);
+   canvas.toBlob(blob=>{if(blob)onSave(blob)},'image/jpeg',0.9);
+ }
+ return <div className="confirmOverlay"><div className="confirmCard cropCard">
+   <h3>顔写真の表示範囲を調整</h3>
+   <p className="fine">円をドラッグして、プロフィールに表示する位置を選択してください。</p>
+   <div className="avatarCropStage" onPointerMove={pointerMove} onPointerUp={pointerUp} onPointerCancel={pointerUp}>
+     {url&&<img id="avatarCropImage" src={url} alt="切り抜き対象" onLoad={ready}/>}
+     <div className="avatarCropMask" style={{left:crop.x,top:crop.y,width:crop.size,height:crop.size}} onPointerDown={pointerDown}></div>
+   </div>
+   <div className="cropPreviewRow"><span>プレビュー</span><div className="cropPreview" style={{width:88,height:88}}>{url&&imgSize.w>0&&<div style={{width:crop.size,height:crop.size,transform:`scale(${88/crop.size})`,transformOrigin:'top left',position:'relative',overflow:'hidden',borderRadius:'50%'}}><img src={url} alt="" style={{position:'absolute',width:imgSize.w,height:imgSize.h,left:-crop.x+(stage-imgSize.w)/2,top:-crop.y+(stage-imgSize.h)/2}}/></div>}</div></div>
+   <div className="actions"><button onClick={save}>この範囲で保存</button><button className="secondary" onClick={onCancel}>キャンセル</button></div>
+ </div></div>;
 }
 
 
@@ -455,6 +515,7 @@ function AccountSettings({profile,session}:{profile:Profile;session:any}){
  const [password2,setPassword2]=useState('');
  const [msg,setMsg]=useState('');
  const [uploading,setUploading]=useState(false);
+ const [cropFile,setCropFile]=useState<File|null>(null);
 
  useEffect(()=>{(async()=>{
    const {data,error}=await supabase.from('profiles').select('full_name,birth_date,phone,staff_title,avatar_path,role').eq('id',profile.id).maybeSingle();
@@ -467,18 +528,15 @@ function AccountSettings({profile,session}:{profile:Profile;session:any}){
    setMsg(error?error.message:'個人情報を保存しました。');
  }
 
- async function uploadAvatar(file:File){
+ async function uploadCroppedAvatar(blob:Blob){
    setUploading(true);setMsg('');
-   if(!file.type.startsWith('image/')){setMsg('画像ファイルを選択してください。');setUploading(false);return}
-   if(file.size>5*1024*1024){setMsg('画像は5MB以下にしてください。');setUploading(false);return}
-   const ext=(file.name.split('.').pop()||'jpg').toLowerCase();
-   const path=`${profile.id}/avatar.${ext}`;
-   const {error:upErr}=await supabase.storage.from('profile-photos').upload(path,file,{upsert:true,contentType:file.type});
+   const path=`${profile.id}/avatar.jpg`;
+   const {error:upErr}=await supabase.storage.from('profile-photos').upload(path,blob,{upsert:true,contentType:'image/jpeg'});
    if(upErr){setMsg(upErr.message);setUploading(false);return}
    const {error:pErr}=await supabase.from('profiles').update({avatar_path:path}).eq('id',profile.id);
-   setMsg(pErr?pErr.message:'顔写真を更新しました。');
+   setMsg(pErr?pErr.message:'顔写真の切り抜きを保存しました。');
    if(!pErr)setForm((x:any)=>({...x,avatar_path:path}));
-   setUploading(false);
+   setCropFile(null);setUploading(false);
  }
 
  async function saveEmail(){
@@ -499,7 +557,8 @@ function AccountSettings({profile,session}:{profile:Profile;session:any}){
 
  return <section><Title t="SET / Account" s="個人情報とログイン情報を変更"/>
    {msg&&<div className="notice">{msg}</div>}
-   <div className="panel form"><h3>顔写真</h3><div className="avatarSetting"><Avatar path={form.avatar_path} name={form.full_name||profile.full_name} size={96}/><div><input type="file" accept="image/jpeg,image/png,image/webp" onChange={e=>{const file=e.target.files?.[0];if(file)uploadAvatar(file)}}/><p className="fine">JPEG・PNG・WebP、5MB以下</p>{uploading&&<span className="fine">アップロード中...</span>}</div></div></div>
+   <div className="panel form"><h3>顔写真</h3><div className="avatarSetting"><Avatar path={form.avatar_path} name={form.full_name||profile.full_name} size={96}/><div><input type="file" accept="image/jpeg,image/png,image/webp" onChange={e=>{const file=e.target.files?.[0];if(!file)return;if(file.size>5*1024*1024){setMsg('画像は5MB以下にしてください。');return}setCropFile(file)}}/><p className="fine">JPEG・PNG・WebP、5MB以下。選択後に表示範囲を調整できます。</p>{uploading&&<span className="fine">アップロード中...</span>}</div></div></div>
+   {cropFile&&<AvatarCropper file={cropFile} onCancel={()=>setCropFile(null)} onSave={uploadCroppedAvatar}/>}
    <div className="panel form"><h3>個人情報</h3><div className="grid2"><label>氏名<input value={form.full_name||''} onChange={e=>setForm({...form,full_name:e.target.value})}/></label><label>生年月日<input type="date" value={form.birth_date||''} onChange={e=>setForm({...form,birth_date:e.target.value})}/></label><label>電話番号<input value={form.phone||''} onChange={e=>setForm({...form,phone:e.target.value})}/></label><label>役職・肩書<input value={form.staff_title||''} onChange={e=>setForm({...form,staff_title:e.target.value})}/></label></div><button onClick={saveProfile}>個人情報を保存</button></div>
    <div className="panel form"><h3>ログインID（メールアドレス）</h3><input type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="メールアドレス"/><p className="fine">メールアドレス変更時は確認メールによる認証が必要です。</p><button onClick={saveEmail}>メールアドレスを変更</button></div>
    <div className="panel form"><h3>パスワード</h3><div className="grid2"><input type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="新しいパスワード"/><input type="password" value={password2} onChange={e=>setPassword2(e.target.value)} placeholder="新しいパスワード（確認）"/></div><p className="fine">8文字以上・英字と数字を両方含む</p><button onClick={savePassword}>パスワードを変更</button></div>
