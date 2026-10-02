@@ -256,9 +256,40 @@ function PlayerMessagesView({profile}:{profile:Profile}){
 }
 
 function PlayerInjuryReport({profile,onDone}:{profile:Profile;onDone:()=>void}){
- const [form,setForm]=useState<any>(emptyReport()),[msg,setMsg]=useState('');
- async function submit(e:React.FormEvent){e.preventDefault();const {error}=await supabase.from('injury_reports').insert({player_id:profile.id,...form,visit_date:form.visit_date||null,review_status:'pending'});setMsg(error?error.message:'ケガの報告を送信しました。');if(!error){setForm(emptyReport());setTimeout(onDone,300)}}
- return <section><Title t="ケガの報告" s="新しいケガ・症状を報告します"/><form className="panel form" onSubmit={submit}><ReportFields value={form} setValue={setForm}/><button>報告する</button></form>{msg&&<div className="notice">{msg}</div>}</section>;
+ const [form,setForm]=useState<any>(emptyReport()),[msg,setMsg]=useState(''),[files,setFiles]=useState<File[]>([]),[uploading,setUploading]=useState(false);
+ async function submit(e:React.FormEvent){
+   e.preventDefault();setUploading(true);
+   const {data,error}=await supabase.from('injury_reports').insert({player_id:profile.id,...form,visit_date:form.visit_date||null,review_status:'pending'}).select('id').single();
+   if(error){setMsg(error.message);setUploading(false);return}
+   let uploadError:any=null;
+   for(const file of files){
+     if(file.size>10*1024*1024){uploadError=new Error('添付ファイルは1件10MB以下にしてください。');break}
+     const safe=file.name.replace(/[^a-zA-Z0-9._-]/g,'_');
+     const path=`${profile.id}/reports/${data.id}/${Date.now()}-${safe}`;
+     const up=await supabase.storage.from('medical-attachments').upload(path,file,{contentType:file.type||'application/octet-stream'});
+     if(up.error){uploadError=up.error;break}
+     const meta=await supabase.from('injury_report_attachments').insert({report_id:data.id,player_id:profile.id,storage_path:path,file_name:file.name,mime_type:file.type||'application/octet-stream',file_size:file.size,uploaded_by:profile.id});
+     if(meta.error){uploadError=meta.error;break}
+   }
+   setMsg(uploadError?'報告は送信しましたが、添付に失敗しました: '+uploadError.message:'ケガの報告を送信しました。');
+   setUploading(false);
+   if(!uploadError){setForm(emptyReport());setFiles([]);setTimeout(onDone,300)}
+ }
+ return <section><Title t="ケガの報告" s="新しいケガ・症状を報告します"/><form className="panel form" onSubmit={submit}><ReportFields value={form} setValue={setForm}/>
+ <div className="medicalAttachmentBox"><b>病院関連資料・画像</b><input type="file" multiple accept="image/*,.pdf" onChange={e=>setFiles(Array.from(e.target.files||[]))}/><small>診断書・画像・病院資料など。画像またはPDF、1ファイル10MB以下。</small>{files.length>0&&<div className="attachmentNames">{files.map((f,i)=><span key={i}>{f.name}</span>)}</div>}</div>
+ <button disabled={uploading}>{uploading?'送信中...':'報告する'}</button></form>{msg&&<div className="notice">{msg}</div>}</section>;
+}
+
+
+function InjuryAttachments({reportId}:{reportId:number}){
+ const [rows,setRows]=useState<any[]>([]);
+ useEffect(()=>{supabase.from('injury_report_attachments').select('*').eq('report_id',reportId).order('created_at').then(({data})=>setRows(data||[]))},[reportId]);
+ async function openFile(path:string){
+   const {data,error}=await supabase.storage.from('medical-attachments').createSignedUrl(path,300);
+   if(!error&&data?.signedUrl)window.open(data.signedUrl,'_blank','noopener,noreferrer');
+ }
+ if(!rows.length)return null;
+ return <div className="attachmentList">{rows.map(r=><button type="button" className="attachmentLink" key={r.id} onClick={()=>openFile(r.storage_path)}>{r.file_name}</button>)}</div>;
 }
 
 function PlayerInjuryHistory({profile}:{profile:Profile}){
@@ -267,7 +298,7 @@ function PlayerInjuryHistory({profile}:{profile:Profile}){
  async function load(){const {data,error}=await supabase.from('injury_reports').select('id,player_id,injury_date,symptom,body_part,side,activity,mechanism,hospital_status,facility_name,visit_date,diagnosis,instructed_plan,notes,review_status,created_at,player_edited_fields,player_last_edited_at').eq('player_id',profile.id).order('injury_date',{ascending:false});if(error)setMsg(error.message);setRows(data||[])}
  async function save(){if(!edit)return;const {error}=await supabase.rpc('player_update_own_injury_report',{p_report_id:edit.id,p_injury_date:edit.injury_date,p_symptom:edit.symptom,p_body_part:edit.body_part,p_side:edit.side,p_activity:edit.activity||null,p_mechanism:edit.mechanism||null,p_hospital_status:edit.hospital_status||null,p_facility_name:edit.facility_name||null,p_visit_date:edit.visit_date||null,p_diagnosis:edit.diagnosis||null,p_instructed_plan:edit.instructed_plan||null,p_notes:edit.notes||null});setMsg(error?error.message:'履歴を更新しました。');if(!error){setEdit(null);load()}}
  const changed=(r:any,k:string)=>Array.isArray(r.player_edited_fields)&&r.player_edited_fields.includes(k);
- return <section><Title t="ケガの履歴" s="該当するケガを選択して報告内容を編集できます"/>{msg&&<div className="notice">{msg}</div>}<div className="tableWrap"><table><thead><tr><th>受傷日</th><th>ケガ・症状</th><th>部位</th><th>受診</th><th>編集</th></tr></thead><tbody>{rows.map(r=><tr key={r.id}><td className={changed(r,'injury_date')?'changed':''}>{r.injury_date}</td><td className={changed(r,'symptom')?'changed':''}>{r.symptom}</td><td className={changed(r,'body_part')?'changed':''}>{r.body_part}</td><td>{r.hospital_status||'-'}</td><td><button onClick={()=>setEdit({...r})}>選択・編集</button></td></tr>)}</tbody></table>{!rows.length&&<div className="empty">ケガの履歴はありません。</div>}</div>
+ return <section><Title t="ケガの履歴" s="該当するケガを選択して報告内容を編集できます"/>{msg&&<div className="notice">{msg}</div>}<div className="tableWrap"><table><thead><tr><th>受傷日</th><th>ケガ・症状</th><th>部位</th><th>受診</th><th>添付</th><th>編集</th></tr></thead><tbody>{rows.map(r=><tr key={r.id}><td className={changed(r,'injury_date')?'changed':''}>{r.injury_date}</td><td className={changed(r,'symptom')?'changed':''}>{r.symptom}</td><td className={changed(r,'body_part')?'changed':''}>{r.body_part}</td><td>{r.hospital_status||'-'}</td><td><InjuryAttachments reportId={r.id}/></td><td><button onClick={()=>setEdit({...r})}>選択・編集</button></td></tr>)}</tbody></table>{!rows.length&&<div className="empty">ケガの履歴はありません。</div>}</div>
  {edit&&<div className="panel form editPanel"><h3>{edit.injury_date}｜{edit.symptom}</h3><p className="fine">変更した項目は保存後、赤文字・赤枠で表示されます。</p><ReportFields value={edit} setValue={setEdit} changedFields={edit.player_edited_fields}/><div className="actions"><button onClick={save}>変更を保存</button><button className="secondary" onClick={()=>setEdit(null)}>キャンセル</button></div></div>}</section>;
 }
 
@@ -575,7 +606,7 @@ function Reports({profile,isAdmin}:{profile:Profile|null;isAdmin:boolean}){
  return <section><Title t="選手報告" s="新規報告は未読時のみ上部タブが赤く表示されます"/>
  {profile?.role==='player'&&<form className="panel form" onSubmit={submit}><h3>新しい傷害・症状を報告</h3><ReportFields value={form} setValue={setForm}/><button>報告する</button></form>}
  {msg&&<div className="notice">{msg}</div>}
- <div className="tableWrap"><table><thead><tr><th>日付</th><th>症状</th><th>部位</th><th>状態</th><th>編集履歴</th>{(isAdmin||profile?.role==='player')&&<th>操作</th>}</tr></thead><tbody>{rows.map(r=><tr key={r.id}><td className={changed(r,'injury_date')?'changed':''}>{r.injury_date}</td><td className={changed(r,'symptom')?'changed':''}>{r.symptom}</td><td className={changed(r,'body_part')?'changed':''}>{r.body_part}</td><td>{r.review_status==='pending'?'未確認':'確認済み'}</td><td>{r.player_last_edited_at?<span className="changed">選手が変更済み</span>:'-'}</td>{(isAdmin||profile?.role==='player')&&<td>{(isAdmin||ownCanEdit(r))&&<button onClick={()=>setEdit({...r})}>編集</button>} {isAdmin&&r.review_status==='pending'&&<button onClick={()=>convert(r.id)}>ケース化</button>}</td>}</tr>)}</tbody></table></div>
+ <div className="tableWrap"><table><thead><tr><th>日付</th><th>症状</th><th>部位</th><th>状態</th><th>添付</th><th>編集履歴</th>{(isAdmin||profile?.role==='player')&&<th>操作</th>}</tr></thead><tbody>{rows.map(r=><tr key={r.id}><td className={changed(r,'injury_date')?'changed':''}>{r.injury_date}</td><td className={changed(r,'symptom')?'changed':''}>{r.symptom}</td><td className={changed(r,'body_part')?'changed':''}>{r.body_part}</td><td>{r.review_status==='pending'?'未確認':'確認済み'}</td><td><InjuryAttachments reportId={r.id}/></td><td>{r.player_last_edited_at?<span className="changed">選手が変更済み</span>:'-'}</td>{(isAdmin||profile?.role==='player')&&<td>{(isAdmin||ownCanEdit(r))&&<button onClick={()=>setEdit({...r})}>編集</button>} {isAdmin&&r.review_status==='pending'&&<button onClick={()=>convert(r.id)}>ケース化</button>}</td>}</tr>)}</tbody></table></div>
  {edit&&<div className="panel form editPanel"><h3>傷害履歴を編集</h3><p className="fine">選手本人が変更した項目は保存後、赤文字・赤枠で表示されます。</p><ReportFields value={edit} setValue={setEdit} changedFields={edit.player_edited_fields}/><div className="actions"><button onClick={saveEdit}>保存</button><button className="secondary" onClick={()=>setEdit(null)}>キャンセル</button></div></div>}
  </section>;
 }
