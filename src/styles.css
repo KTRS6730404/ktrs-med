@@ -252,3 +252,6 @@ main{max-width:none}
 .navNestedHead.active{font-weight:700}
 .navNestedChildren{display:grid;gap:3px;padding-left:14px}
 .navNestedChildren button{text-align:left}
+
+.scheduleOpponentBlock{display:grid;gap:6px}
+.scheduleOpponentBlock input,.scheduleOpponentBlock select{width:100%}
