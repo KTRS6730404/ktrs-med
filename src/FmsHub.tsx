@@ -8,7 +8,7 @@ export default function FmsHub({initialTab='schedule',compact=false,pageTitle}:{
  const [tab,setTab]=useState<Tab>(initialTab);
  useEffect(()=>{setTab(initialTab)},[initialTab]);
  const tabs:[Tab,string][]=[['schedule','スケジュール'],['rehab','リハビリ・受診'],['library','メニュー'],['gps','GPS'],['video','動画'],['prevention','傷害予防'],['report','レポート'],['team','TEAM']];
- return <section><div className="title"><h1>{pageTitle||'KTRS FMS'}</h1><p>高校サッカー育成年代の傷害予防・メディカル・パフォーマンス統合管理</p></div>{!compact&&<div className="fmsTabs">{tabs.map(([k,l])=><button key={k} className={tab===k?'active':''} onClick={()=>setTab(k)}>{l}</button>)}</div>}{tab==='schedule'&&<Schedule/>}{tab==='rehab'&&<Rehab/>}{tab==='library'&&<Library/>}{tab==='gps'&&<Gps/>}{tab==='video'&&<Video/>}{tab==='prevention'&&<Prevention/>}{tab==='report'&&<Report/>}{tab==='team'&&<Team/>}</section>
+ return <section><div className="title"><h1>{pageTitle||'KTRS FMS'}</h1></div>{!compact&&<div className="fmsTabs">{tabs.map(([k,l])=><button key={k} className={tab===k?'active':''} onClick={()=>setTab(k)}>{l}</button>)}</div>}{tab==='schedule'&&<Schedule/>}{tab==='rehab'&&<Rehab/>}{tab==='library'&&<Library/>}{tab==='gps'&&<Gps/>}{tab==='video'&&<Video/>}{tab==='prevention'&&<Prevention/>}{tab==='report'&&<Report/>}{tab==='team'&&<Team/>}</section>
 }
 function Schedule(){
  const blank:any={event_type:'training',title:'',starts_at:'',ends_at:'',venue:'',opponent:'',competition_name:'',training_theme:'',details:'',gps_enabled:false};
@@ -61,6 +61,7 @@ function MiniLineChart({title,subtitle,rows,series}:{title:string;subtitle:strin
  return <><button type="button" className="gpsChartCard gpsChartButton" onClick={()=>setExpanded(true)} aria-label={title+'グラフを拡大表示'}>{chart}<span className="expandHint">クリックで拡大</span></button>
  {expanded&&<div className="confirmOverlay" onClick={()=>setExpanded(false)}><div className="confirmCard gpsChartModal" onClick={e=>e.stopPropagation()}><div className="gpsModalHead"><b>{title}</b><button type="button" className="secondary" onClick={()=>setExpanded(false)}>閉じる</button></div>{chart}</div></div>}</>;
 }
+
 function Gps(){
  const [players,setPlayers]=useState<any[]>([]),[sessions,setSessions]=useState<any[]>([]),[metrics,setMetrics]=useState<any[]>([]),[knows,setKnows]=useState<any[]>([]),[msg,setMsg]=useState('');
  const [sort,setSort]=useState<{key:string;dir:'asc'|'desc'}>({key:'athlete_name',dir:'asc'});
@@ -70,43 +71,50 @@ function Gps(){
      supabase.from('profiles').select('id,full_name').eq('role','player').eq('is_hidden',false),
      supabase.from('gps_sessions').select('*').order('session_date',{ascending:false}),
      supabase.from('gps_player_metrics').select('*,profiles(full_name)').order('created_at',{ascending:false}).limit(100),
-     supabase.from('knows_gps_imports').select('*').order('session_date',{ascending:false}).order('athlete_name')
+     supabase.from('knows_gps_imports').select('*').order('session_date',{ascending:false}).order('kickoff_time',{ascending:false}).order('athlete_name')
    ]);
    setPlayers(p||[]);setSessions(s||[]);setMetrics(m||[]);setKnows(k||[]);
  }
  useEffect(()=>{load()},[]);
  async function addSession(){const {data:{user}}=await supabase.auth.getUser();if(!user)return;const {error}=await supabase.from('gps_sessions').insert({...sf,duration_minutes:sf.duration_minutes?Number(sf.duration_minutes):null,created_by:user.id});setMsg(error?error.message:'GPSセッション追加');if(!error)load()}
  async function addMetric(){const {data:{user}}=await supabase.auth.getUser();if(!user||!mf.gps_session_id||!mf.player_id)return;const prev=metrics.filter(x=>x.player_id===mf.player_id&&x.hsr_distance_m!=null).slice(0,5);const avg=prev.length?prev.reduce((a,x)=>a+Number(x.hsr_distance_m),0)/prev.length:0;const h=mf.hsr_distance_m?Number(mf.hsr_distance_m):0;const pct=avg?Math.round((h-avg)/avg*100):null;const feedback=pct==null?'比較データがまだありません。':'HSRは直近平均より'+(pct>=0?'+':'')+pct+'%。最終判断はスタッフが行ってください。';const p:any={...mf,feedback,created_by:user.id};['gps_session_id','sprint_count','acceleration_count','deceleration_count'].forEach(k=>p[k]=p[k]?Number(p[k]):null);['total_distance_m','meters_per_min','hsr_distance_m','sprint_distance_m','max_speed_kmh'].forEach(k=>p[k]=p[k]?Number(p[k]):null);const {error}=await supabase.from('gps_player_metrics').upsert(p,{onConflict:'gps_session_id,player_id'});setMsg(error?error.message:'GPSデータ保存');if(!error)load()}
- async function deleteKnows(id:number,name:string){if(!confirm(name+' のKnowsサンプルデータを削除しますか？'))return;const {error}=await supabase.from('knows_gps_imports').delete().eq('id',id);setMsg(error?error.message:'Knowsサンプルデータを削除しました。');if(!error)load()}
- const grouped=knows.reduce((acc:any,row:any)=>{const key=row.session_date+'|'+row.session_name;(acc[key] ||= []).push(row);return acc},{});
- const weekly=Object.entries(grouped).map(([key,rowsAny])=>{const rows=rowsAny as any[];const avg=(k:string)=>rows.reduce((a,r)=>a+Number(r[k]||0),0)/Math.max(1,rows.length);return {key,label:rows[0].session_date.slice(5).replace('-','/')+' '+rows[0].session_name,total_distance_m:avg('total_distance_m'),sprint_distance_m:avg('sprint_distance_m'),si:avg('si'),hi:avg('hi'),sprint_count:avg('sprint_count'),acceleration_count:avg('acceleration_count'),deceleration_count:avg('deceleration_count')}}).sort((a:any,b:any)=>String(a.key).localeCompare(String(b.key))).slice(-7);
- const sorted=[...knows].sort((a:any,b:any)=>{const av=a[sort.key],bv=b[sort.key];const cmp=typeof av==='string'?String(av||'').localeCompare(String(bv||''),'ja'):Number(av||0)-Number(bv||0);return sort.dir==='asc'?cmp:-cmp});
+ async function deleteKnows(id:number,name:string){if(!confirm(name+' のGPSデータを削除しますか？'))return;const {error}=await supabase.from('knows_gps_imports').delete().eq('id',id);setMsg(error?error.message:'GPSデータを削除しました。');if(!error)load()}
+ const matchGroups=knows.reduce((acc:any,row:any)=>{
+   const key=[row.session_date,row.kickoff_time||'',row.venue||'',row.opponent||'',row.session_name||''].join('|');
+   (acc[key] ||= []).push(row); return acc;
+ },{});
+ const matches=Object.entries(matchGroups).map(([key,rowsAny])=>{const rows=rowsAny as any[];return {key,rows,head:rows[0]}}).sort((a:any,b:any)=>String(b.head.session_date+' '+(b.head.kickoff_time||'')).localeCompare(String(a.head.session_date+' '+(a.head.kickoff_time||''))));
+ const weekly=matches.map((g:any)=>{const rows=g.rows;const avg=(k:string)=>rows.reduce((a:any,r:any)=>a+Number(r[k]||0),0)/Math.max(1,rows.length);return {key:g.key,label:g.head.session_date.slice(5).replace('-','/')+' '+(g.head.opponent||g.head.session_name||''),total_distance_m:avg('total_distance_m'),sprint_distance_m:avg('sprint_distance_m'),si:avg('si'),hi:avg('hi'),sprint_count:avg('sprint_count'),acceleration_count:avg('acceleration_count'),deceleration_count:avg('deceleration_count')}}).sort((a:any,b:any)=>String(a.key).localeCompare(String(b.key))).slice(-7);
  const toggleSort=(key:string)=>setSort(s=>({key,dir:s.key===key&&s.dir==='asc'?'desc':'asc'}));
  const arrow=(key:string)=>sort.key===key?(sort.dir==='asc'?' ▲':' ▼'):'';
+ const sortRows=(rows:any[])=>[...rows].sort((a:any,b:any)=>{const av=a[sort.key],bv=b[sort.key];const cmp=typeof av==='string'?String(av||'').localeCompare(String(bv||''),'ja'):Number(av||0)-Number(bv||0);return sort.dir==='asc'?cmp:-cmp});
  const fmt=(v:any,d=0)=>v==null?'-':Number(v).toLocaleString('ja-JP',{maximumFractionDigits:d});
+ const timeText=(v:any)=>v?String(v).slice(0,5):'-';
  return <div>
    <div className="gpsChartsTop">
      <MiniLineChart title="Volume" subtitle="チーム平均｜総走行距離・スプリント距離" rows={weekly} series={[{key:'total_distance_m',label:'総走行距離',unit:'m'},{key:'sprint_distance_m',label:'スプリント距離',unit:'m'}]}/>
      <MiniLineChart title="Intensity" subtitle="チーム平均｜SI・HI" rows={weekly} series={[{key:'si',label:'SI'},{key:'hi',label:'HI'}]}/>
      <MiniLineChart title="Actions" subtitle="チーム平均｜スプリント・加速・減速" rows={weekly} series={[{key:'sprint_count',label:'スプリント',unit:'回'},{key:'acceleration_count',label:'加速',unit:'回'},{key:'deceleration_count',label:'減速',unit:'回'}]}/>
    </div>
-   <div className="panel"><div className="gpsSampleHead"><div><h3>Knows GPS 選手一覧</h3><p>総走行距離1000m未満は除外済み。列名をクリックして並び替えできます。</p></div><span className="pill info">{knows.length}件</span></div>
-   {knows.length===0?<div className="empty">Knows取込データはありません。</div>:<div className="tableWrap"><table className="knowsTable"><thead><tr>
-   <th><button className="sortHead" onClick={()=>toggleSort('athlete_name')}>選手{arrow('athlete_name')}</button></th>
-   <th><button className="sortHead" onClick={()=>toggleSort('total_distance_m')}>総走行距離{arrow('total_distance_m')}</button></th>
-   <th><button className="sortHead" onClick={()=>toggleSort('sprint_distance_m')}>スプリント距離{arrow('sprint_distance_m')}</button></th>
-   <th><button className="sortHead" onClick={()=>toggleSort('sprint_count')}>スプリント回数{arrow('sprint_count')}</button></th>
-   <th><button className="sortHead" onClick={()=>toggleSort('si')}>SI{arrow('si')}</button></th>
-   <th><button className="sortHead" onClick={()=>toggleSort('hi')}>HI{arrow('hi')}</button></th>
-   <th><button className="sortHead" onClick={()=>toggleSort('acceleration_count')}>加速{arrow('acceleration_count')}</button></th>
-   <th><button className="sortHead" onClick={()=>toggleSort('deceleration_count')}>減速{arrow('deceleration_count')}</button></th><th>操作</th></tr></thead>
-   <tbody>{sorted.map(r=><tr key={r.id}><td><b>{r.athlete_name}</b><small>{r.session_date}｜{r.session_name}</small></td><td>{fmt(r.total_distance_m,0)}m</td><td>{fmt(r.sprint_distance_m,1)}m</td><td>{fmt(r.sprint_count)}回</td><td>{fmt(r.si,2)}</td><td>{fmt(r.hi,2)}</td><td>{fmt(r.acceleration_count)}回</td><td>{fmt(r.deceleration_count)}回</td><td><button className="dangerBtn" onClick={()=>deleteKnows(r.id,r.athlete_name)}>削除</button></td></tr>)}</tbody></table></div>}
+   <div className="gpsMatchList">
+   {matches.length===0?<div className="panel empty">GPS取込データはありません。</div>:matches.map((g:any)=><details className="panel gpsMatchCard" key={g.key}>
+      <summary className="gpsMatchSummary"><div><span>日付</span><b>{g.head.session_date}</b></div><div><span>キックオフ時間</span><b>{timeText(g.head.kickoff_time)}</b></div><div><span>試合会場</span><b>{g.head.venue||'-'}</b></div><div><span>対戦相手</span><b>{g.head.opponent||'-'}</b></div><em>{g.rows.length}名</em></summary>
+      <div className="tableWrap"><table className="knowsTable"><thead><tr>
+      <th><button className="sortHead" onClick={()=>toggleSort('athlete_name')}>選手{arrow('athlete_name')}</button></th>
+      <th><button className="sortHead" onClick={()=>toggleSort('total_distance_m')}>総走行距離{arrow('total_distance_m')}</button></th>
+      <th><button className="sortHead" onClick={()=>toggleSort('sprint_distance_m')}>スプリント距離{arrow('sprint_distance_m')}</button></th>
+      <th><button className="sortHead" onClick={()=>toggleSort('sprint_count')}>スプリント回数{arrow('sprint_count')}</button></th>
+      <th><button className="sortHead" onClick={()=>toggleSort('si')}>SI{arrow('si')}</button></th>
+      <th><button className="sortHead" onClick={()=>toggleSort('hi')}>HI{arrow('hi')}</button></th>
+      <th><button className="sortHead" onClick={()=>toggleSort('acceleration_count')}>加速{arrow('acceleration_count')}</button></th>
+      <th><button className="sortHead" onClick={()=>toggleSort('deceleration_count')}>減速{arrow('deceleration_count')}</button></th><th>操作</th></tr></thead>
+      <tbody>{sortRows(g.rows).map((r:any)=><tr key={r.id}><td><b>{r.athlete_name}</b></td><td>{fmt(r.total_distance_m,0)}m</td><td>{fmt(r.sprint_distance_m,1)}m</td><td>{fmt(r.sprint_count)}回</td><td>{fmt(r.si,2)}</td><td>{fmt(r.hi,2)}</td><td>{fmt(r.acceleration_count)}回</td><td>{fmt(r.deceleration_count)}回</td><td><button className="dangerBtn" onClick={()=>deleteKnows(r.id,r.athlete_name)}>削除</button></td></tr>)}</tbody></table></div>
+   </details>)}
    </div>
    <details className="panel gpsManual"><summary>手入力GPSデータ</summary><div className="form"><h3>GPSセッション</h3><div className="grid2"><input type="date" value={sf.session_date} onChange={e=>setSf({...sf,session_date:e.target.value})}/><input placeholder="セッション名" value={sf.session_name} onChange={e=>setSf({...sf,session_name:e.target.value})}/><select value={sf.session_type} onChange={e=>setSf({...sf,session_type:e.target.value})}><option value="training">練習</option><option value="friendly_match">練習試合</option><option value="official_match">公式戦</option><option value="rehab">リハビリ</option><option value="other">その他</option></select><input type="number" placeholder="時間 分" value={sf.duration_minutes} onChange={e=>setSf({...sf,duration_minutes:e.target.value})}/></div><button onClick={addSession}>追加</button></div><div className="form"><h3>選手GPSデータ</h3><div className="grid2"><select value={mf.gps_session_id} onChange={e=>setMf({...mf,gps_session_id:e.target.value})}><option value="">セッション選択</option>{sessions.map(s=><option key={s.id} value={s.id}>{s.session_date}｜{s.session_name}</option>)}</select><select value={mf.player_id} onChange={e=>setMf({...mf,player_id:e.target.value})}><option value="">選手選択</option>{players.map(p=><option key={p.id} value={p.id}>{p.full_name}</option>)}</select><input type="number" placeholder="Total Distance m" value={mf.total_distance_m} onChange={e=>setMf({...mf,total_distance_m:e.target.value})}/><input type="number" placeholder="m/min" value={mf.meters_per_min} onChange={e=>setMf({...mf,meters_per_min:e.target.value})}/><input type="number" placeholder="HSR m" value={mf.hsr_distance_m} onChange={e=>setMf({...mf,hsr_distance_m:e.target.value})}/><input type="number" placeholder="Sprint Distance m" value={mf.sprint_distance_m} onChange={e=>setMf({...mf,sprint_distance_m:e.target.value})}/><input type="number" placeholder="Sprint回数" value={mf.sprint_count} onChange={e=>setMf({...mf,sprint_count:e.target.value})}/><input type="number" placeholder="Max Speed km/h" value={mf.max_speed_kmh} onChange={e=>setMf({...mf,max_speed_kmh:e.target.value})}/><input type="number" placeholder="加速回数" value={mf.acceleration_count} onChange={e=>setMf({...mf,acceleration_count:e.target.value})}/><input type="number" placeholder="減速回数" value={mf.deceleration_count} onChange={e=>setMf({...mf,deceleration_count:e.target.value})}/></div><button onClick={addMetric}>保存・フィードバック</button></div><div className="tableWrap"><table><thead><tr><th>選手</th><th>Total</th><th>HSR</th><th>Sprint</th><th>Max</th><th>Feedback</th></tr></thead><tbody>{metrics.map(m=><tr key={m.id}><td>{m.profiles?.full_name||'-'}</td><td>{m.total_distance_m||'-'}m</td><td>{m.hsr_distance_m||'-'}m</td><td>{m.sprint_distance_m||'-'}m</td><td>{m.max_speed_kmh||'-'}km/h</td><td>{m.feedback||'-'}</td></tr>)}</tbody></table></div></details>
    {msg&&<div className="notice">{msg}</div>}
  </div>;
 }
-
 function Video(){
  const [rows,setRows]=useState<any[]>([]),[players,setPlayers]=useState<any[]>([]),[f,setF]=useState<any>({player_id:'',category:'training',title:'',description:'',video_url:''}),[msg,setMsg]=useState('');
  async function load(){const [{data:r},{data:p}]=await Promise.all([supabase.from('videos').select('*,profiles(full_name)').order('created_at',{ascending:false}),supabase.from('profiles').select('id,full_name').eq('role','player')]);setRows(r||[]);setPlayers(p||[])}
