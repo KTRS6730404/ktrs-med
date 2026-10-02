@@ -131,6 +131,14 @@ function Auth(){
 
 function Pending({status,reason,onLogout}:{status?:Approval;reason?:string|null;onLogout:()=>void}){return <Center><div className="authCard"><h2>{status==='rejected'?'アカウントは承認されていません':'管理者の承認待ちです'}</h2><p>{status==='rejected'?(reason||'管理者にお問い合わせください。'):'承認後にKTRS FMSを利用できます。'}</p><button onClick={onLogout}>ログアウト</button></div></Center>}
 
+function LiveDateTime(){
+ const [now,setNow]=useState(()=>new Date());
+ useEffect(()=>{const id=window.setInterval(()=>setNow(new Date()),1000);return()=>window.clearInterval(id)},[]);
+ const date=new Intl.DateTimeFormat('ja-JP',{timeZone:'Asia/Tokyo',year:'numeric',month:'numeric',day:'numeric',weekday:'short'}).format(now);
+ const time=new Intl.DateTimeFormat('ja-JP',{timeZone:'Asia/Tokyo',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false}).format(now);
+ return <span className="liveDateTime">{date} {time}</span>;
+}
+
 function Shell({profile,isAdmin,screen,setScreen,alerts,onLogout,children}:any){
  const [open,setOpen]=useState<Record<string,boolean>>({TEAM:true,SCHEDULE:false,PERFORMANCE:false,MEDICAL:true,DEVELOPMENT:false,COMMUNICATION:false,MANAGEMENT:false,SET:false});
  const groups:{key:string;label:string;items:[Screen,string][]}[]=[
@@ -156,7 +164,7 @@ function Shell({profile,isAdmin,screen,setScreen,alerts,onLogout,children}:any){
      </div>)}
    </aside>
    <div className="appContent">
-     <header className="topHeader"><div><b>KTRS FMS</b><span> K-trainers Football Management System</span></div><div className="user">{profile?.full_name||''}<button onClick={onLogout}>ログアウト</button></div></header>
+     <header className="topHeader"><div><b>KTRS FMS</b><span> K-trainers Football Management System</span></div><div className="user"><LiveDateTime/><span className="headerUserName">{profile?.full_name||''}</span><button onClick={onLogout}>ログアウト</button></div></header>
      <main>{children}</main>
      <footer>© K-TRAINERS. All rights reserved.<br/><span>傷害情報は認証されたサーバーに保存されます。</span></footer>
    </div>
@@ -179,7 +187,7 @@ function PlayerPortal({profile,session,onLogout}:{profile:Profile;session:any;on
      {groups.map(g=><div className="navGroup" key={g.key}><button className={'navGroupHead '+(g.items.some(([k])=>k===screen)?'activeGroup':'')} onClick={()=>setOpen(o=>({...o,[g.key]:!o[g.key]}))}><span>{g.label}</span><span className="chev">{open[g.key]?'−':'＋'}</span></button>{open[g.key]&&<div className="navChildren">{g.items.map(([k,l])=><button key={k} className={screen===k?'active':''} onClick={()=>setScreen(k)}>{l}</button>)}</div>}</div>)}
    </aside>
    <div className="appContent">
-     <header className="topHeader"><div><b>KTRS FMS</b><span> PLAYER PORTAL</span></div><div className="user">{profile.full_name} さん <button onClick={onLogout}>ログアウト</button></div></header>
+     <header className="topHeader"><div><b>KTRS FMS</b><span> PLAYER PORTAL</span></div><div className="user"><LiveDateTime/><span className="headerUserName">{profile.full_name} さん</span><button onClick={onLogout}>ログアウト</button></div></header>
      <main className="playerMain">
        {screen==='mypage'&&<PlayerMyPage profile={profile}/>}
        {screen==='schedule'&&<PlayerSchedule profile={profile}/>}
