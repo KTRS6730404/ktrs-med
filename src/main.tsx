@@ -8,7 +8,7 @@ type Role='player'|'staff';
 type Approval='pending'|'approved'|'rejected';
 type Profile={id:string;role:Role;full_name:string;school_grade:number|null;position:string|null;jersey_number:number|null;height_cm:number|null;weight_kg:number|null;dominant_foot:string|null;origin_team:string|null;avatar_path:string|null;player_registration_number:string|null;staff_title:string|null;team_id:number|null};
 type ApprovalRow={user_id:string;status:Approval;rejection_reason:string|null};
-type Screen='home'|'team_players'|'team_staff'|'team_teams'|'schedule_training'|'schedule_games'|'schedule_events'|'schedule_medical'|'performance_physical'|'performance_gps'|'performance_body'|'performance_benchmark'|'medical_injury'|'medical_evaluation'|'medical_treatment'|'medical_rehab'|'medical_rtp'|'development_evaluation'|'development_objectives'|'development_reports'|'development_video'|'communication_chat'|'communication_announcement'|'communication_notifications'|'management_accounts'|'management_permissions'|'management_data'|'management_settings'|'set_schedule_categories';
+type Screen='home'|'team_players'|'team_staff'|'team_teams'|'schedule_training'|'schedule_games'|'schedule_events'|'schedule_medical'|'performance_physical'|'performance_gps'|'performance_gps_game'|'performance_gps_tr'|'performance_body'|'performance_benchmark'|'medical_injury'|'medical_evaluation'|'medical_treatment'|'medical_rehab'|'medical_rtp'|'development_evaluation'|'development_objectives'|'development_reports'|'development_video'|'communication_chat'|'communication_announcement'|'communication_notifications'|'management_accounts'|'management_permissions'|'management_data'|'management_settings'|'set_schedule_categories';
 type PlayerScreen='mypage'|'schedule'|'report'|'history'|'medical'|'rehab'|'rtp'|'physical'|'gps'|'messages'|'chat'|'settings';
 
 const statusLabel:Record<string,string>={needs_attention:'要対応',rehab:'リハビリ中',observation:'経過観察',available:'問題なし'};
@@ -84,6 +84,8 @@ function App(){
    {screen==='schedule_medical'&&<FmsHub initialTab="schedule" compact pageTitle="SCHEDULE / Medical"/>}
    {screen==='performance_physical'&&<><Title t="PERFORMANCE / Physical" s="フィジカル測定と経時変化"/><AdminPhysicalBulk/></>}
    {screen==='performance_gps'&&<FmsHub initialTab="gps" compact pageTitle="PERFORMANCE / GPS"/>}
+   {screen==='performance_gps_game'&&<FmsHub initialTab="gps" compact pageTitle="PERFORMANCE / GPS / Game" gpsCategory="Game"/>}
+   {screen==='performance_gps_tr'&&<FmsHub initialTab="gps" compact pageTitle="PERFORMANCE / GPS / TR" gpsCategory="TR"/>}
    {screen==='performance_body'&&<ModulePlaceholder title="PERFORMANCE / Body Composition" text="身長・体重・BMI・体組成データを集約する画面です。"/>}
    {screen==='performance_benchmark'&&<ModulePlaceholder title="PERFORMANCE / Benchmark" text="学年・ポジション別の基準値と個人値を比較する画面です。"/>}
    {screen==='medical_injury'&&<Cases isAdmin={isAdmin}/>}
@@ -140,11 +142,11 @@ function LiveDateTime(){
 }
 
 function Shell({profile,isAdmin,screen,setScreen,alerts,onLogout,children}:any){
- const [open,setOpen]=useState<Record<string,boolean>>({TEAM:true,SCHEDULE:false,PERFORMANCE:false,MEDICAL:true,DEVELOPMENT:false,COMMUNICATION:false,MANAGEMENT:false,SET:false});
+ const [open,setOpen]=useState<Record<string,boolean>>({TEAM:true,SCHEDULE:false,PERFORMANCE:false,GPS:false,MEDICAL:true,DEVELOPMENT:false,COMMUNICATION:false,MANAGEMENT:false,SET:false});
  const groups:{key:string;label:string;items:[Screen,string][]}[]=[
    {key:'TEAM',label:'TEAM',items:[['team_players','Players'],['team_staff','Staff'],['team_teams','Teams']]},
    {key:'SCHEDULE',label:'SCHEDULE',items:[['schedule_training','Training'],['schedule_games','Games'],['schedule_events','Events'],['schedule_medical','Medical']]},
-   {key:'PERFORMANCE',label:'PERFORMANCE',items:[['performance_physical','Physical'],['performance_gps','GPS'],['performance_body','Body Composition'],['performance_benchmark','Benchmark']]},
+   {key:'PERFORMANCE',label:'PERFORMANCE',items:[['performance_physical','Physical'],['performance_body','Body Composition'],['performance_benchmark','Benchmark']]},
    {key:'MEDICAL',label:'MEDICAL',items:[['medical_injury','Injury'],['medical_evaluation','Evaluation'],['medical_treatment','Treatment'],['medical_rehab','Rehabilitation'],['medical_rtp','Return to Play']]},
    {key:'DEVELOPMENT',label:'DEVELOPMENT',items:[['development_evaluation','Player Evaluation'],['development_objectives','Objectives'],['development_reports','Reports'],['development_video','Video']]},
    {key:'COMMUNICATION',label:'COMMUNICATION',items:[['communication_chat','Chat'],['communication_announcement','Announcement'],['communication_notifications','Notifications']]},
@@ -160,7 +162,10 @@ function Shell({profile,isAdmin,screen,setScreen,alerts,onLogout,children}:any){
        <button className={'navGroupHead '+(g.items.some(([k])=>k===screen)?'activeGroup':'')} onClick={()=>setOpen(o=>({...o,[g.key]:!o[g.key]}))}>
          <span>{g.label}</span><span className="chev">{open[g.key]?'−':'＋'}</span>
        </button>
-       {open[g.key]&&<div className="navChildren">{g.items.filter(([k])=>isAdmin||(!k.startsWith('management_')&&!k.startsWith('set_'))).map(([k,l])=>{const n=alertFor(k);return <button key={k} className={screen===k?'active':''} onClick={()=>setScreen(k)}><span>{l}</span>{n>0&&<em>{n}</em>}</button>})}</div>}
+       {open[g.key]&&<div className="navChildren">
+         {g.key==='PERFORMANCE'&&<div className="navNested"><button className={'navNestedHead '+(screen==='performance_gps'||screen==='performance_gps_game'||screen==='performance_gps_tr'?'active':'')} onClick={()=>setOpen(o=>({...o,GPS:!o.GPS}))}><span>GPS</span><span className="chev">{open.GPS?'−':'＋'}</span></button>{open.GPS&&<div className="navNestedChildren"><button className={screen==='performance_gps_game'?'active':''} onClick={()=>setScreen('performance_gps_game')}>Game</button><button className={screen==='performance_gps_tr'?'active':''} onClick={()=>setScreen('performance_gps_tr')}>TR</button></div>}</div>}
+         {g.items.filter(([k])=>isAdmin||(!k.startsWith('management_')&&!k.startsWith('set_'))).map(([k,l])=>{const n=alertFor(k);return <button key={k} className={screen===k?'active':''} onClick={()=>setScreen(k)}><span>{l}</span>{n>0&&<em>{n}</em>}</button>})}
+       </div>}
      </div>)}
    </aside>
    <div className="appContent">
