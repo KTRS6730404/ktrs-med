@@ -9,7 +9,7 @@ type Approval='pending'|'approved'|'rejected';
 type Profile={id:string;role:Role;full_name:string;school_grade:number|null;position:string|null;jersey_number:number|null;height_cm:number|null;weight_kg:number|null;dominant_foot:string|null;origin_team:string|null;avatar_path:string|null;player_registration_number:string|null;staff_title:string|null;team_id:number|null};
 type ApprovalRow={user_id:string;status:Approval;rejection_reason:string|null};
 type Screen='home'|'team_players'|'team_staff'|'team_teams'|'schedule_training'|'schedule_games'|'schedule_events'|'schedule_medical'|'performance_physical'|'performance_gps'|'performance_body'|'performance_benchmark'|'medical_injury'|'medical_evaluation'|'medical_treatment'|'medical_rehab'|'medical_rtp'|'development_evaluation'|'development_objectives'|'development_reports'|'development_video'|'communication_chat'|'communication_announcement'|'communication_notifications'|'management_accounts'|'management_permissions'|'management_data'|'management_settings';
-type PlayerScreen='mypage'|'report'|'history'|'physical'|'chat'|'settings';
+type PlayerScreen='mypage'|'schedule'|'report'|'history'|'medical'|'rehab'|'rtp'|'physical'|'gps'|'messages'|'chat'|'settings';
 
 const statusLabel:Record<string,string>={needs_attention:'要対応',rehab:'リハビリ中',observation:'経過観察',available:'問題なし'};
 const statusClass:Record<string,string>={needs_attention:'danger',rehab:'info',observation:'warn',available:'ok'};
@@ -163,8 +163,38 @@ function Shell({profile,isAdmin,screen,setScreen,alerts,onLogout,children}:any){
 
 function PlayerPortal({profile,session,onLogout}:{profile:Profile;session:any;onLogout:()=>void}){
  const [screen,setScreen]=useState<PlayerScreen>('mypage');
- const items:[PlayerScreen,string][]=[['mypage','マイページ'],['report','ケガの報告'],['history','ケガの履歴'],['physical','フィジカルデータ'],['chat','チャット'],['settings','設定']];
- return <div className="playerPortal"><header className="playerHeader"><div><b>KTRS FMS</b><span> PLAYER PORTAL</span></div><div className="user">{profile.full_name} さん <button onClick={onLogout}>ログアウト</button></div></header><div className="playerBody"><aside className="playerSidebar">{items.map(([k,l])=><button key={k} className={screen===k?'active':''} onClick={()=>setScreen(k)}>{l}</button>)}</aside><main className="playerMain">{screen==='mypage'&&<PlayerMyPage profile={profile}/>} {screen==='report'&&<PlayerInjuryReport profile={profile} onDone={()=>setScreen('history')}/>} {screen==='history'&&<PlayerInjuryHistory profile={profile}/>} {screen==='physical'&&<PhysicalMeasurements profile={profile}/>} {screen==='chat'&&<PlayerChat profile={profile}/>} {screen==='settings'&&<PlayerSettings profile={profile} session={session}/>}</main></div><footer>© K-TRAINERS. All rights reserved.</footer></div>;
+ const [open,setOpen]=useState<Record<string,boolean>>({MEDICAL:true,PERFORMANCE:true,COMMUNICATION:true,SETTINGS:true});
+ const groups:{key:string;label:string;items:[PlayerScreen,string][]}[]=[
+   {key:'MEDICAL',label:'MEDICAL',items:[['report','ケガの報告'],['history','ケガの履歴'],['medical','現在の傷害'],['rehab','リハビリ'],['rtp','Return to Play']]},
+   {key:'PERFORMANCE',label:'PERFORMANCE',items:[['physical','フィジカル'],['gps','GPS']]},
+   {key:'COMMUNICATION',label:'COMMUNICATION',items:[['schedule','スケジュール'],['messages','お知らせ'],['chat','チャット']]},
+   {key:'SETTINGS',label:'SETTINGS',items:[['settings','設定']]}
+ ];
+ return <div className="appFrame playerPortal">
+   <aside className="mainSidebar playerNav">
+     <div className="sidebarBrand"><b>KTRS FMS</b><span>PLAYER PORTAL</span></div>
+     <button className={'sidebarHome '+(screen==='mypage'?'active':'')} onClick={()=>setScreen('mypage')}>HOME</button>
+     {groups.map(g=><div className="navGroup" key={g.key}><button className={'navGroupHead '+(g.items.some(([k])=>k===screen)?'activeGroup':'')} onClick={()=>setOpen(o=>({...o,[g.key]:!o[g.key]}))}><span>{g.label}</span><span className="chev">{open[g.key]?'−':'＋'}</span></button>{open[g.key]&&<div className="navChildren">{g.items.map(([k,l])=><button key={k} className={screen===k?'active':''} onClick={()=>setScreen(k)}>{l}</button>)}</div>}</div>)}
+   </aside>
+   <div className="appContent">
+     <header className="topHeader"><div><b>KTRS FMS</b><span> PLAYER PORTAL</span></div><div className="user">{profile.full_name} さん <button onClick={onLogout}>ログアウト</button></div></header>
+     <main className="playerMain">
+       {screen==='mypage'&&<PlayerMyPage profile={profile}/>}
+       {screen==='schedule'&&<PlayerSchedule profile={profile}/>}
+       {screen==='report'&&<PlayerInjuryReport profile={profile} onDone={()=>setScreen('history')}/>}
+       {screen==='history'&&<PlayerInjuryHistory profile={profile}/>}
+       {screen==='medical'&&<PlayerMedicalOverview profile={profile}/>}
+       {screen==='rehab'&&<PlayerRehabView profile={profile}/>}
+       {screen==='rtp'&&<PlayerRtpView profile={profile}/>}
+       {screen==='physical'&&<PhysicalMeasurements profile={profile}/>}
+       {screen==='gps'&&<PlayerGpsView profile={profile}/>}
+       {screen==='messages'&&<PlayerMessagesView profile={profile}/>}
+       {screen==='chat'&&<PlayerChat profile={profile}/>}
+       {screen==='settings'&&<PlayerSettings profile={profile} session={session}/>}
+     </main>
+     <footer>© K-TRAINERS. All rights reserved.</footer>
+   </div>
+ </div>;
 }
 
 function PlayerMyPage({profile}:{profile:Profile}){
@@ -186,6 +216,44 @@ function PlayerMyPage({profile}:{profile:Profile}){
 }
 
 function emptyReport(){return {injury_date:'',symptom:'',body_part:'',side:'right',activity:'',mechanism:'',hospital_status:'未受診',facility_name:'',visit_date:'',diagnosis:'',instructed_plan:'',notes:''}}
+
+
+function PlayerSchedule({profile}:{profile:Profile}){
+ const [rows,setRows]=useState<any[]>([]);
+ useEffect(()=>{(async()=>{const today=new Date().toISOString();const {data}=await supabase.from('player_schedule').select('*').or('player_id.is.null,player_id.eq.'+profile.id).gte('starts_at',today).order('starts_at',{ascending:true}).limit(60);setRows(data||[])})()},[profile.id]);
+ return <section><Title t="スケジュール"/><div className="panel">{rows.length?rows.map(r=><div className="scheduleItem" key={r.id}><b>{new Date(r.starts_at).toLocaleString('ja-JP',{month:'numeric',day:'numeric',weekday:'short',hour:'2-digit',minute:'2-digit'})}</b><span>{r.entry_label||r.title||r.event_type||'-'}</span>{r.location&&<small>{r.location}</small>}</div>):<div className="empty">予定はありません。</div>}</div></section>;
+}
+
+function PlayerMedicalOverview({profile}:{profile:Profile}){
+ const [rows,setRows]=useState<any[]>([]);
+ useEffect(()=>{supabase.from('injury_cases').select('*').eq('player_id',profile.id).order('injury_date',{ascending:false}).then(({data})=>setRows(data||[]))},[profile.id]);
+ return <section><Title t="現在の傷害"/><div className="caseGrid">{rows.length?rows.map(r=><div className="panel" key={r.id}><h3>{r.injury_name}</h3><p>{r.body_part} / {r.side||'-'}</p><span className={'pill '+statusClass[r.current_status]}>{statusLabel[r.current_status]||r.current_status}</span><p>受傷日: {r.injury_date}</p>{r.notes&&<p>{r.notes}</p>}</div>):<div className="panel empty">傷害ケースはありません。</div>}</div></section>;
+}
+
+function PlayerRehabView({profile}:{profile:Profile}){
+ const [rows,setRows]=useState<any[]>([]);
+ useEffect(()=>{(async()=>{const {data:cases}=await supabase.from('injury_cases').select('id,injury_name,body_part,rehab_start_date,rehab_stage').eq('player_id',profile.id);const ids=(cases||[]).map((x:any)=>x.id);if(!ids.length){setRows([]);return}const {data:prog}=await supabase.from('rehab_progress').select('*').in('case_id',ids).order('recorded_at',{ascending:false});const map=new Map((cases||[]).map((x:any)=>[x.id,x]));setRows((prog||[]).map((x:any)=>({...x,caseInfo:map.get(x.case_id)})))})()},[profile.id]);
+ return <section><Title t="リハビリ"/><div className="caseGrid">{rows.length?rows.map(r=><div className="panel" key={r.id}><h3>{r.caseInfo?.injury_name||'リハビリ'}</h3><p>{r.stage_name||('Stage '+(r.caseInfo?.rehab_stage??'-'))}</p>{r.progress_percent!=null&&<p><b>進捗 {r.progress_percent}%</b></p>}{r.exercises&&<p>{r.exercises}</p>}{r.next_plan&&<p>次の予定: {r.next_plan}</p>}</div>):<div className="panel empty">リハビリ記録はありません。</div>}</div></section>;
+}
+
+function PlayerRtpView({profile}:{profile:Profile}){
+ const [rows,setRows]=useState<any[]>([]);
+ useEffect(()=>{(async()=>{const {data:cases}=await supabase.from('injury_cases').select('id,injury_name').eq('player_id',profile.id);const ids=(cases||[]).map((x:any)=>x.id);if(!ids.length){setRows([]);return}const {data}=await supabase.from('return_to_play_decisions').select('*').in('case_id',ids).order('decided_at',{ascending:false});const map=new Map((cases||[]).map((x:any)=>[x.id,x]));setRows((data||[]).map((x:any)=>({...x,injury_name:map.get(x.case_id)?.injury_name})))})()},[profile.id]);
+ const label:any={not_cleared:'復帰不可',modified:'制限付き',full:'完全復帰'};
+ return <section><Title t="Return to Play"/><div className="caseGrid">{rows.length?rows.map(r=><div className="panel" key={r.id}><h3>{r.injury_name||'復帰判断'}</h3><p><b>{label[r.status]||r.status}</b></p>{r.criteria_summary&&<p>{r.criteria_summary}</p>}{r.restrictions&&<p>制限: {r.restrictions}</p>}<small>{new Date(r.decided_at).toLocaleString('ja-JP')}</small></div>):<div className="panel empty">復帰判断記録はありません。</div>}</div></section>;
+}
+
+function PlayerGpsView({profile}:{profile:Profile}){
+ const [rows,setRows]=useState<any[]>([]);
+ useEffect(()=>{supabase.from('gps_player_metrics').select('*,gps_sessions(session_date,session_name,session_type)').eq('player_id',profile.id).order('created_at',{ascending:false}).then(({data})=>setRows(data||[]))},[profile.id]);
+ return <section><Title t="GPS"/><div className="tableWrap"><table><thead><tr><th>日付</th><th>セッション</th><th>総走行距離</th><th>HSR</th><th>スプリント</th><th>最高速度</th></tr></thead><tbody>{rows.map(r=><tr key={r.id}><td>{r.gps_sessions?.session_date||'-'}</td><td>{r.gps_sessions?.session_name||'-'}</td><td>{r.total_distance_m??'-'}m</td><td>{r.hsr_distance_m??'-'}m</td><td>{r.sprint_distance_m??'-'}m / {r.sprint_count??'-'}回</td><td>{r.max_speed_kmh??'-'}km/h</td></tr>)}</tbody></table>{!rows.length&&<div className="empty">GPSデータはありません。</div>}</div></section>;
+}
+
+function PlayerMessagesView({profile}:{profile:Profile}){
+ const [rows,setRows]=useState<any[]>([]);
+ useEffect(()=>{supabase.from('player_messages').select('*').eq('player_id',profile.id).order('created_at',{ascending:false}).then(({data})=>setRows(data||[]))},[profile.id]);
+ return <section><Title t="お知らせ"/><div className="panel">{rows.length?rows.map(r=><div className="messageItem" key={r.id}><b>{r.title}</b><p>{r.body||''}</p><small>{new Date(r.created_at).toLocaleString('ja-JP')}</small></div>):<div className="empty">お知らせはありません。</div>}</div></section>;
+}
 
 function PlayerInjuryReport({profile,onDone}:{profile:Profile;onDone:()=>void}){
  const [form,setForm]=useState<any>(emptyReport()),[msg,setMsg]=useState('');
