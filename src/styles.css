@@ -354,3 +354,26 @@ main{max-width:none}
 .latestGameEval span,.latestGameEval p{font-size:12px;color:#65798c;margin:0}
 .gameAnalysisSave{display:flex;justify-content:flex-end;position:sticky;bottom:14px;z-index:3}
 @media(max-width:720px){.gameAnalysisHeader{align-items:flex-start;flex-direction:column}.gradeButtons{min-width:190px}.gameMediaGrid{grid-template-columns:1fr 1fr}}
+
+.navTitleWithAlert{display:inline-flex;align-items:center;gap:7px}
+.navGroupAlert{display:inline-grid;place-items:center;min-width:20px;height:20px;padding:0 6px;border-radius:999px;background:#d92d20;color:#fff;font-size:11px;font-style:normal;line-height:1}
+.scheduleDay{border:1px solid #e7edf4;border-radius:12px;padding:0 12px;background:#fff}
+.scheduleDay+.scheduleDay{margin-top:8px}
+.scheduleDayHead{cursor:pointer;list-style:none;margin:0;padding:12px 0}
+.scheduleDayHead::-webkit-details-marker{display:none}
+.scheduleDayHead:after{content:'＋';color:#7890a7;font-weight:700}
+.scheduleDay[open]>.scheduleDayHead:after{content:'−'}
+.scheduleDaySummary{margin-left:auto;margin-right:8px;font-size:12px;color:#7890a7}
+.scheduleDayBody{padding:0 0 10px}
+.scheduleDayAdd{display:flex;justify-content:flex-end;padding:2px 0 8px}
+.playerScheduleDay{border-bottom:1px solid #edf1f5}
+.playerScheduleDay:last-child{border-bottom:0}
+.playerScheduleDay>summary{display:grid;grid-template-columns:48px 1fr;gap:12px;align-items:center;padding:12px 16px;cursor:pointer;list-style:none}
+.playerScheduleDay>summary::-webkit-details-marker{display:none}
+.playerScheduleDay>summary>div:last-child{display:grid;gap:2px}
+.playerScheduleDay>summary>div:last-child span{font-size:11px;color:#748698}
+.playerScheduleDayBody .sofaScheduleRow{grid-template-columns:1fr;padding-left:76px}
+.saveBtn,.scheduleActions>button:first-child,.gameAnalysisSave>button,.categoryEditCard .actions>button:first-child{background:#dcecff!important;color:#245985!important;border:1px solid #c8def3!important}
+.saveBtn:hover,.scheduleActions>button:first-child:hover,.gameAnalysisSave>button:hover,.categoryEditCard .actions>button:first-child:hover{background:#cfe5fb!important}
+.dangerBtn{background:#f8dddd!important;color:#9b3b3b!important;border-color:#efc4c4!important}
+.dangerBtn:hover{background:#f2cfcf!important}
