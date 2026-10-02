@@ -42,20 +42,24 @@ function Library(){
 }
 
 
+
 function MiniLineChart({title,subtitle,rows,series}:{title:string;subtitle:string;rows:any[];series:{key:string;label:string;unit?:string}[]}){
+ const [expanded,setExpanded]=useState(false);
  const w=760,h=230,pad={l:54,r:18,t:24,b:38};
  const values=rows.flatMap(r=>series.map(s=>Number(r[s.key]||0)));
  const max=Math.max(1,...values),min=0;
  const x=(i:number)=>rows.length<=1?(pad.l+(w-pad.l-pad.r)/2):pad.l+i*(w-pad.l-pad.r)/(rows.length-1);
  const y=(v:number)=>h-pad.b-(v-min)/(max-min)*(h-pad.t-pad.b);
  const ticks=[0,.25,.5,.75,1].map(v=>Math.round(max*v));
- return <div className="gpsChartCard"><div className="gpsChartTitle"><div><h4>{title}</h4><p>{subtitle}</p></div><div className="gpsLegend">{series.map((s,i)=><span key={s.key}><i className={'gpsDot dot'+i}></i>{s.label}</span>)}</div></div>
+ const chart=<><div className="gpsChartTitle"><div><h4>{title}</h4><p>{subtitle}</p></div><div className="gpsLegend">{series.map((s,i)=><span key={s.key}><i className={'gpsDot dot'+i}></i>{s.label}</span>)}</div></div>
  <svg className="gpsChart" viewBox={'0 0 '+w+' '+h} role="img" aria-label={title+'折れ線グラフ'}>
    {ticks.map((t,i)=>{const yy=y(t);return <g key={i}><line x1={pad.l} x2={w-pad.r} y1={yy} y2={yy} className="gridLine"/><text x={pad.l-8} y={yy+4} textAnchor="end" className="axisText">{t.toLocaleString()}</text></g>})}
    <line x1={pad.l} x2={pad.l} y1={pad.t} y2={h-pad.b} className="axisLine"/><line x1={pad.l} x2={w-pad.r} y1={h-pad.b} y2={h-pad.b} className="axisLine"/>
    {series.map((s,si)=>{const pts=rows.map((r,i)=>x(i)+','+y(Number(r[s.key]||0))).join(' ');return <g key={s.key}>{rows.length>1&&<polyline points={pts} fill="none" className={'gpsSeries series'+si}/>} {rows.map((r,i)=><circle key={i} cx={x(i)} cy={y(Number(r[s.key]||0))} r="4" className={'gpsPoint point'+si}><title>{r.label} {s.label}: {Number(r[s.key]||0).toLocaleString('ja-JP',{maximumFractionDigits:1})}{s.unit||''}</title></circle>)}</g>})}
    {rows.map((r,i)=><text key={i} x={x(i)} y={h-12} textAnchor="middle" className="axisText">{r.label}</text>)}
- </svg></div>
+ </svg></>;
+ return <><button type="button" className="gpsChartCard gpsChartButton" onClick={()=>setExpanded(true)} aria-label={title+'グラフを拡大表示'}>{chart}<span className="expandHint">クリックで拡大</span></button>
+ {expanded&&<div className="confirmOverlay" onClick={()=>setExpanded(false)}><div className="confirmCard gpsChartModal" onClick={e=>e.stopPropagation()}><div className="gpsModalHead"><b>{title}</b><button type="button" className="secondary" onClick={()=>setExpanded(false)}>閉じる</button></div>{chart}</div></div>}</>;
 }
 function Gps(){
  const [players,setPlayers]=useState<any[]>([]),[sessions,setSessions]=useState<any[]>([]),[metrics,setMetrics]=useState<any[]>([]),[knows,setKnows]=useState<any[]>([]),[msg,setMsg]=useState('');
