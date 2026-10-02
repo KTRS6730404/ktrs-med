@@ -377,3 +377,15 @@ main{max-width:none}
 .saveBtn:hover,.scheduleActions>button:first-child:hover,.gameAnalysisSave>button:hover,.categoryEditCard .actions>button:first-child:hover{background:#cfe5fb!important}
 .dangerBtn{background:#f8dddd!important;color:#9b3b3b!important;border-color:#efc4c4!important}
 .dangerBtn:hover{background:#f2cfcf!important}
+
+.recipientChecklist{display:grid;gap:6px;max-height:300px;overflow:auto;border:1px solid #e0e7ef;border-radius:12px;padding:8px;background:#fbfdff}
+.recipientCheck{display:grid!important;grid-template-columns:auto auto 1fr;align-items:center;gap:8px;padding:7px 8px;border-radius:9px;cursor:pointer;color:#173454!important}
+.recipientCheck:hover{background:#f0f6fc}
+.recipientCheck input{width:auto!important;margin:0}
+.recipientCheck span{display:grid;gap:1px}
+.recipientCheck small{font-size:11px;color:#748698}
+.recipientCount{font-size:12px;color:#60758a;text-align:right}
+.groupCreateCard{max-width:620px;width:min(94vw,620px)}
+.groupMemberChecklist{max-height:360px}
+.chatFilters{display:grid;grid-template-columns:minmax(160px,1fr) minmax(150px,.9fr) minmax(180px,1.1fr) 150px auto;gap:8px;align-items:center;margin-bottom:12px}
+@media(max-width:900px){.chatFilters{grid-template-columns:1fr 1fr}.chatFilters button{grid-column:span 2}}
