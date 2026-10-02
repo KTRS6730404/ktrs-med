@@ -48,8 +48,11 @@ function App(){
      const {data:counts}=await supabase.rpc('get_admin_tab_alert_counts');
      setAlerts({...{team:0,reports:0,players:0,case:0,admin:0},...(counts||{})});
    }else if((p as any)?.role==='staff'){
-     const {data:u}=await supabase.rpc('get_unread_injury_report_count');
-     setAlerts({team:0,reports:Number(u||0),players:0,case:0,admin:0});
+     const [{data:u},{count:chatCount}]=await Promise.all([
+       supabase.rpc('get_unread_injury_report_count'),
+       supabase.from('chat_messages').select('id',{count:'exact',head:true}).eq('recipient_id',uid).is('read_at',null)
+     ]);
+     setAlerts({team:0,reports:Number(u||0),players:0,case:0,admin:0,chat:Number(chatCount||0)});
    }
    setLoading(false);
  }
@@ -64,6 +67,9 @@ function App(){
    }else if(next==='development_reports' && profile?.role==='staff'){
      await supabase.rpc('mark_injury_reports_read');
      setAlerts(prev=>({...prev,reports:0}));
+   }else if(next==='communication_chat' && profile?.role==='staff'){
+     await supabase.from('chat_messages').update({read_at:new Date().toISOString()}).eq('recipient_id',profile.id).is('read_at',null);
+     setAlerts(prev=>({...prev,chat:0}));
    }
  }
 
@@ -377,7 +383,7 @@ function PlayerMyPage({profile}:{profile:Profile}){
      <div className="playerHomeSide">
        <div className="panel sofaSection">
          <div className="sofaSectionHead"><div><span className="sectionKicker">SCHEDULE</span><h3>次の予定</h3></div></div>
-         {schedule.length?<div className="sofaScheduleList">{schedule.map((s:any)=><div className="sofaScheduleRow" key={s.id}><div className="sofaDateBox"><b>{new Date(s.starts_at||s.schedule_date).getDate()}</b><span>{new Date(s.starts_at||s.schedule_date).toLocaleDateString('ja-JP',{month:'short'})}</span></div><div><b>{s.entry_label||s.title||s.event_type||'-'}</b>{s.event_type==='Game'&&s.opponent&&<span>vs {s.opponent}</span>}{s.competition_name&&<small>{s.competition_name}</small>}{s.location&&<small>{s.location}</small>}</div></div>)}</div>:<div className="empty compact">今週の予定はありません。</div>}
+         {schedule.length?<div className="sofaScheduleList">{Array.from(new Set(schedule.map((s:any)=>s.schedule_date||String(s.starts_at||'').slice(0,10)))).map((date:any)=>{const rows=schedule.filter((s:any)=>(s.schedule_date||String(s.starts_at||'').slice(0,10))===date);const d=new Date(String(date)+'T00:00:00');return <details className="playerScheduleDay" key={String(date)}><summary><div className="sofaDateBox"><b>{d.getDate()}</b><span>{d.toLocaleDateString('ja-JP',{month:'short'})}</span></div><div><b>{d.toLocaleDateString('ja-JP',{weekday:'short'})}</b><span>{rows.length}件</span></div></summary><div className="playerScheduleDayBody">{rows.map((s:any)=><div className="sofaScheduleRow" key={s.id}><div><b>{s.entry_label||s.title||s.event_type||'-'}</b>{s.event_type==='Game'&&s.opponent&&<span>vs {s.opponent}</span>}{s.competition_name&&<small>{s.competition_name}</small>}{s.location&&<small>{s.location}</small>}</div></div>)}</div></details>})}</div>:<div className="empty compact">今週の予定はありません。</div>}
        </div>
 
        {latestEval&&<div className="panel sofaSection">
