@@ -457,8 +457,8 @@ function Team({isAdmin,profile}:{isAdmin:boolean;profile:Profile|null}){
      supabase.from('player_schedule').select('id,schedule_date,entry_label,event_type,opponent,starts_at,location,staff_names,notes,title,category,details').is('player_id',null).gte('schedule_date',weekStart).lte('schedule_date',weekEnd).order('schedule_date').order('id'),
      supabase.from('profiles').select('id,full_name,role').eq('role','staff').order('full_name')
    ]);
-   const existing=s||[];
-   const seeded=[...existing];
+   const existing:any[]=s||[];
+   const seeded:any[]=[...existing];
    weekDates.forEach((d:Date)=>{
      const date=iso(d);
      const dayRows=seeded.filter((x:any)=>x.schedule_date===date);
