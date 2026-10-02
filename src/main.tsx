@@ -638,35 +638,113 @@ function PlayerChat({profile}:{profile:Profile}){
 }
 
 function StaffChat({profile,isAdmin}:{profile:Profile|null;isAdmin:boolean}){
- const [people,setPeople]=useState<any[]>([]),[messages,setMessages]=useState<any[]>([]),[recipient,setRecipient]=useState(''),[body,setBody]=useState(''),[confirm,setConfirm]=useState(false),[msg,setMsg]=useState('');
- const [filters,setFilters]=useState({person:'',keyword:'',date:''});
+ const [people,setPeople]=useState<any[]>([]);
+ const [messages,setMessages]=useState<any[]>([]);
+ const [groups,setGroups]=useState<any[]>([]);
+ const [selectedRecipients,setSelectedRecipients]=useState<string[]>([]);
+ const [body,setBody]=useState('');
+ const [confirm,setConfirm]=useState(false);
+ const [msg,setMsg]=useState('');
+ const [filters,setFilters]=useState({person:'',group:'',keyword:'',date:''});
+ const [groupModal,setGroupModal]=useState(false);
+ const [groupName,setGroupName]=useState('');
+ const [groupMembers,setGroupMembers]=useState<string[]>([]);
+
  useEffect(()=>{load()},[]);
  async function load(){
-   const [{data:p},{data:m}]=await Promise.all([
-     supabase.from('profiles').select('id,full_name,role,avatar_path').order('full_name'),
-     supabase.from('chat_messages').select('*').order('created_at',{ascending:false})
+   const [{data:p},{data:m},{data:g}]=await Promise.all([
+     supabase.from('profiles').select('id,full_name,role,avatar_path,school_grade').order('role').order('school_grade',{ascending:false}).order('full_name'),
+     supabase.from('chat_messages').select('*').order('created_at',{ascending:false}),
+     supabase.from('chat_groups').select('id,name,chat_group_members(user_id)').order('name')
    ]);
-   setPeople(p||[]);setMessages(m||[]);
+   setPeople(p||[]);setMessages(m||[]);setGroups(g||[]);
    if(profile?.id)await supabase.from('chat_messages').update({read_at:new Date().toISOString()}).eq('recipient_id',profile.id).is('read_at',null);
  }
  const map=new Map(people.map(p=>[p.id,p]));
  const nameOf=(id:string)=>map.get(id)?.full_name||'不明';
+ const groupIds=(value:string)=>{
+   if(value==='all_players')return people.filter(p=>p.role==='player').map(p=>p.id);
+   if(value==='grade3')return people.filter(p=>p.role==='player'&&Number(p.school_grade)===3).map(p=>p.id);
+   if(value==='grade2')return people.filter(p=>p.role==='player'&&Number(p.school_grade)===2).map(p=>p.id);
+   if(value==='grade1')return people.filter(p=>p.role==='player'&&Number(p.school_grade)===1).map(p=>p.id);
+   if(value==='all_staff')return people.filter(p=>p.role==='staff').map(p=>p.id);
+   if(value.startsWith('custom:')){
+     const id=Number(value.split(':')[1]);
+     return (groups.find(g=>g.id===id)?.chat_group_members||[]).map((m:any)=>m.user_id);
+   }
+   return [];
+ };
  const filtered=useMemo(()=>messages.filter(m=>{
    const personOk=!filters.person||m.sender_id===filters.person||m.recipient_id===filters.person;
+   const ids=groupIds(filters.group);
+   const groupOk=!filters.group||ids.includes(m.sender_id)||ids.includes(m.recipient_id);
    const keywordOk=!filters.keyword||String(m.body||'').toLowerCase().includes(filters.keyword.toLowerCase())||nameOf(m.sender_id).includes(filters.keyword)||nameOf(m.recipient_id).includes(filters.keyword);
    const dateOk=!filters.date||String(m.created_at||'').slice(0,10)===filters.date;
-   return personOk&&keywordOk&&dateOk;
- }),[messages,filters,people]);
- async function send(){
-   if(!profile?.id||!recipient||!body.trim())return;
-   const {error}=await supabase.from('chat_messages').insert({sender_id:profile.id,recipient_id:recipient,body:body.trim()});
-   setMsg(error?error.message:'送信しました。');if(!error){setBody('');setConfirm(false);load()}
+   return personOk&&groupOk&&keywordOk&&dateOk;
+ }),[messages,filters,people,groups]);
+
+ function toggleRecipient(id:string){setSelectedRecipients(s=>s.includes(id)?s.filter(x=>x!==id):[...s,id])}
+ function selectRecipientGroup(value:string){
+   const ids=groupIds(value).filter(id=>id!==profile?.id);
+   setSelectedRecipients(ids);
  }
+ async function send(){
+   if(!profile?.id||!selectedRecipients.length||!body.trim())return;
+   const rows=selectedRecipients.map(recipient_id=>({sender_id:profile.id,recipient_id,body:body.trim()}));
+   const {error}=await supabase.from('chat_messages').insert(rows);
+   setMsg(error?error.message:selectedRecipients.length+'名へ送信しました。');
+   if(!error){setBody('');setSelectedRecipients([]);setConfirm(false);load()}
+ }
+ async function createGroup(){
+   const name=groupName.trim();
+   if(!profile?.id||!name||!groupMembers.length)return;
+   const {data,error}=await supabase.from('chat_groups').insert({name,created_by:profile.id}).select().single();
+   if(error){setMsg(error.message);return}
+   const {error:memberError}=await supabase.from('chat_group_members').insert(groupMembers.map(user_id=>({group_id:data.id,user_id})));
+   if(memberError){setMsg(memberError.message);return}
+   setMsg('グループ「'+name+'」を追加しました。');setGroupModal(false);setGroupName('');setGroupMembers([]);await load();
+ }
+ function changeGroupFilter(value:string){
+   if(value==='__add__'){setGroupModal(true);setFilters(f=>({...f,group:''}));return}
+   setFilters(f=>({...f,group:value}));
+ }
+ const groupOptions=<>
+   <option value="">グループ</option>
+   <option value="all_players">全選手</option>
+   <option value="grade3">３年生</option>
+   <option value="grade2">２年生</option>
+   <option value="grade1">１年生</option>
+   <option value="all_staff">全スタッフ</option>
+   {groups.map(g=><option key={g.id} value={'custom:'+g.id}>{g.name}</option>)}
+   <option value="__add__">＋追加</option>
+ </>;
+
  return <section><Title t="チャット" s={isAdmin?'全選手・スタッフのチャットを確認できます':'自分宛て・自分が送信したチャットを確認できます'}/>
- {isAdmin&&<div className="chatFilters"><select value={filters.person} onChange={e=>setFilters({...filters,person:e.target.value})}><option value="">全参加者</option>{people.map(p=><option key={p.id} value={p.id}>{p.full_name}（{p.role==='player'?'選手':'スタッフ'}）</option>)}</select><input placeholder="キーワード検索" value={filters.keyword} onChange={e=>setFilters({...filters,keyword:e.target.value})}/><input type="date" value={filters.date} onChange={e=>setFilters({...filters,date:e.target.value})}/><button className="secondary" onClick={()=>setFilters({person:'',keyword:'',date:''})}>検索条件をクリア</button></div>}
- <div className="chatLayout adminChat"><div className="panel chatHistory"><h3>{isAdmin?'全チャット':'チャット履歴'}</h3>{filtered.length?filtered.map(m=><div className="adminChatRow" key={m.id}><div className="chatPeople"><div className="personCell"><Avatar path={map.get(m.sender_id)?.avatar_path} name={nameOf(m.sender_id)} size={34}/><b>{nameOf(m.sender_id)}</b></div><span>→</span><div className="personCell"><Avatar path={map.get(m.recipient_id)?.avatar_path} name={nameOf(m.recipient_id)} size={34}/><b>{nameOf(m.recipient_id)}</b></div></div><div className="chatBody">{m.body}</div><small>{new Date(m.created_at).toLocaleString('ja-JP')}</small></div>):<div className="empty">該当するチャットはありません。</div>}</div>
- <div className="panel chatComposer"><h3>メッセージを作成</h3><label>宛先</label><select value={recipient} onChange={e=>setRecipient(e.target.value)}><option value="">宛先を選択</option>{people.filter(p=>p.id!==profile?.id).map(p=><option value={p.id} key={p.id}>{p.full_name}（{p.role==='player'?'選手':'スタッフ'}）</option>)}</select><label>メッセージ</label><textarea rows={8} maxLength={4000} value={body} onChange={e=>setBody(e.target.value)} placeholder="メッセージを入力"/><button disabled={!recipient||!body.trim()} onClick={()=>setConfirm(true)}>送信内容を確認</button></div></div>
- {confirm&&<div className="confirmOverlay"><div className="confirmCard"><h3>送信内容の確認</h3><p><b>宛先：</b>{nameOf(recipient)}</p><div className="confirmMessage">{body}</div><p className="fine">この内容で送信しますか？</p><div className="actions"><button onClick={send}>送信を確定</button><button className="secondary" onClick={()=>setConfirm(false)}>戻って修正</button></div></div></div>}
+ <div className="chatFilters">
+   <select value={filters.person} onChange={e=>setFilters({...filters,person:e.target.value})}><option value="">全参加者</option>{people.map(p=><option key={p.id} value={p.id}>{p.full_name}（{p.role==='player'?'選手':'スタッフ'}）</option>)}</select>
+   <select value={filters.group} onChange={e=>changeGroupFilter(e.target.value)}>{groupOptions}</select>
+   <input placeholder="キーワード検索" value={filters.keyword} onChange={e=>setFilters({...filters,keyword:e.target.value})}/>
+   <input type="date" value={filters.date} onChange={e=>setFilters({...filters,date:e.target.value})}/>
+   <button className="secondary" onClick={()=>setFilters({person:'',group:'',keyword:'',date:''})}>検索条件をクリア</button>
+ </div>
+
+ <div className="chatLayout adminChat">
+   <div className="panel chatHistory"><h3>{isAdmin?'全チャット':'チャット履歴'}</h3>{filtered.length?filtered.map(m=><div className="adminChatRow" key={m.id}><div className="chatPeople"><div className="personCell"><Avatar path={map.get(m.sender_id)?.avatar_path} name={nameOf(m.sender_id)} size={34}/><b>{nameOf(m.sender_id)}</b></div><span>→</span><div className="personCell"><Avatar path={map.get(m.recipient_id)?.avatar_path} name={nameOf(m.recipient_id)} size={34}/><b>{nameOf(m.recipient_id)}</b></div></div><div className="chatBody">{m.body}</div><small>{new Date(m.created_at).toLocaleString('ja-JP')}</small></div>):<div className="empty">該当するチャットはありません。</div>}</div>
+
+   <div className="panel chatComposer"><h3>メッセージを作成</h3>
+     <label>宛先グループ</label><select defaultValue="" onChange={e=>{if(e.target.value==='__add__'){setGroupModal(true)}else selectRecipientGroup(e.target.value);e.currentTarget.value=''}}>{groupOptions}</select>
+     <label>宛先を選択（複数選択可）</label>
+     <div className="recipientChecklist">{people.filter(p=>p.id!==profile?.id).map(p=><label className="recipientCheck" key={p.id}><input type="checkbox" checked={selectedRecipients.includes(p.id)} onChange={()=>toggleRecipient(p.id)}/><Avatar path={p.avatar_path} name={p.full_name} size={30}/><span><b>{p.full_name}</b><small>{p.role==='player'?(p.school_grade?p.school_grade+'年 / ':'')+'選手':'スタッフ'}</small></span></label>)}</div>
+     <div className="recipientCount">{selectedRecipients.length}名選択中</div>
+     <label>メッセージ</label><textarea rows={8} maxLength={4000} value={body} onChange={e=>setBody(e.target.value)} placeholder="メッセージを入力"/>
+     <button disabled={!selectedRecipients.length||!body.trim()} onClick={()=>setConfirm(true)}>送信内容を確認</button>
+   </div>
+ </div>
+
+ {confirm&&<div className="confirmOverlay"><div className="confirmCard"><h3>送信内容の確認</h3><p><b>宛先：</b>{selectedRecipients.map(nameOf).join('、')}</p><div className="confirmMessage">{body}</div><p className="fine">{selectedRecipients.length}名へ同じメッセージを送信します。</p><div className="actions"><button onClick={send}>送信を確定</button><button className="secondary" onClick={()=>setConfirm(false)}>戻って修正</button></div></div></div>}
+
+ {groupModal&&<div className="confirmOverlay"><div className="confirmCard groupCreateCard"><h3>チャットグループを追加</h3><label>グループ名<input value={groupName} onChange={e=>setGroupName(e.target.value)} placeholder="例：Aチーム、リハビリ組"/></label><label>メンバー</label><div className="recipientChecklist groupMemberChecklist">{people.map(p=><label className="recipientCheck" key={p.id}><input type="checkbox" checked={groupMembers.includes(p.id)} onChange={()=>setGroupMembers(s=>s.includes(p.id)?s.filter(x=>x!==p.id):[...s,p.id])}/><Avatar path={p.avatar_path} name={p.full_name} size={30}/><span><b>{p.full_name}</b><small>{p.role==='player'?(p.school_grade?p.school_grade+'年 / ':'')+'選手':'スタッフ'}</small></span></label>)}</div><div className="actions"><button disabled={!groupName.trim()||!groupMembers.length} onClick={createGroup}>追加</button><button className="secondary" onClick={()=>{setGroupModal(false);setGroupName('');setGroupMembers([])}}>キャンセル</button></div></div></div>}
+
  {msg&&<div className="notice">{msg}</div>}</section>;
 }
 
