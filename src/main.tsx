@@ -8,7 +8,7 @@ type Role='player'|'staff';
 type Approval='pending'|'approved'|'rejected';
 type Profile={id:string;role:Role;full_name:string;school_grade:number|null;position:string|null;jersey_number:number|null;height_cm:number|null;weight_kg:number|null;dominant_foot:string|null;origin_team:string|null;avatar_path:string|null;player_registration_number:string|null;staff_title:string|null;team_id:number|null};
 type ApprovalRow={user_id:string;status:Approval;rejection_reason:string|null};
-type Screen='players'|'reports'|'team'|'case'|'fms'|'chat'|'admin';
+type Screen='home'|'team_players'|'team_staff'|'team_teams'|'schedule_training'|'schedule_games'|'schedule_events'|'schedule_medical'|'performance_physical'|'performance_gps'|'performance_body'|'performance_benchmark'|'medical_injury'|'medical_evaluation'|'medical_treatment'|'medical_rehab'|'medical_rtp'|'development_evaluation'|'development_objectives'|'development_reports'|'development_video'|'communication_chat'|'communication_announcement'|'communication_notifications'|'management_accounts'|'management_permissions'|'management_data'|'management_settings';
 type PlayerScreen='mypage'|'report'|'history'|'physical'|'chat'|'settings';
 
 const statusLabel:Record<string,string>={needs_attention:'要対応',rehab:'リハビリ中',observation:'経過観察',available:'問題なし'};
@@ -20,7 +20,7 @@ function App(){
  const [profile,setProfile]=useState<Profile|null>(null);
  const [approval,setApproval]=useState<ApprovalRow|null>(null);
  const [isAdmin,setIsAdmin]=useState(false);
- const [screen,setScreen]=useState<Screen>('team');
+ const [screen,setScreen]=useState<Screen>('home');
  const [loading,setLoading]=useState(true);
  const [error,setError]=useState('');
  const [alerts,setAlerts]=useState<Record<string,number>>({team:0,reports:0,players:0,case:0,chat:0,admin:0});
@@ -56,10 +56,12 @@ function App(){
 
  async function changeScreen(next:Screen){
    setScreen(next);
-   if(isAdmin){
-     await supabase.rpc('mark_admin_tab_read',{p_tab_key:next});
-     setAlerts(prev=>({...prev,[next]:0}));
-   }else if(next==='reports' && profile?.role==='staff'){
+   const legacyMap:Record<string,string>={home:'team',team_players:'players',medical_injury:'case',communication_chat:'chat',management_accounts:'admin',development_reports:'reports'};
+   const key=legacyMap[next];
+   if(isAdmin&&key){
+     await supabase.rpc('mark_admin_tab_read',{p_tab_key:key});
+     setAlerts(prev=>({...prev,[key]:0}));
+   }else if(next==='development_reports' && profile?.role==='staff'){
      await supabase.rpc('mark_injury_reports_read');
      setAlerts(prev=>({...prev,reports:0}));
    }
@@ -72,13 +74,34 @@ function App(){
 
  return <Shell profile={profile} isAdmin={isAdmin} screen={screen} setScreen={changeScreen} alerts={alerts} onLogout={()=>supabase.auth.signOut()}>
    {error&&<div className="error">{error}</div>}
-   {screen==='team'&&<Team isAdmin={isAdmin}/>}
-   {screen==='reports'&&<Reports profile={profile} isAdmin={isAdmin}/>}
-   {screen==='players'&&<Players isAdmin={isAdmin}/>}
-   {screen==='case'&&<><Cases isAdmin={isAdmin}/>{isAdmin&&<AdminPhysicalBulk/>}</>} 
-   {screen==='fms'&&<FmsHub/>} 
-   {screen==='chat'&&<StaffChat profile={profile} isAdmin={isAdmin}/>}
-   {screen==='admin'&&isAdmin&&<Admin/>}
+   {screen==='home'&&<Team isAdmin={isAdmin}/>}
+   {screen==='team_players'&&<Players isAdmin={isAdmin}/>}
+   {screen==='team_staff'&&<DirectoryView mode="staff"/>}
+   {screen==='team_teams'&&<DirectoryView mode="teams"/>}
+   {screen==='schedule_training'&&<FmsHub initialTab="schedule" compact pageTitle="SCHEDULE / Training"/>}
+   {screen==='schedule_games'&&<FmsHub initialTab="schedule" compact pageTitle="SCHEDULE / Games"/>}
+   {screen==='schedule_events'&&<FmsHub initialTab="schedule" compact pageTitle="SCHEDULE / Events"/>}
+   {screen==='schedule_medical'&&<FmsHub initialTab="schedule" compact pageTitle="SCHEDULE / Medical"/>}
+   {screen==='performance_physical'&&<><Title t="PERFORMANCE / Physical" s="フィジカル測定と経時変化"/><AdminPhysicalBulk/></>}
+   {screen==='performance_gps'&&<FmsHub initialTab="gps" compact pageTitle="PERFORMANCE / GPS"/>}
+   {screen==='performance_body'&&<ModulePlaceholder title="PERFORMANCE / Body Composition" text="身長・体重・BMI・体組成データを集約する画面です。"/>}
+   {screen==='performance_benchmark'&&<ModulePlaceholder title="PERFORMANCE / Benchmark" text="学年・ポジション別の基準値と個人値を比較する画面です。"/>}
+   {screen==='medical_injury'&&<Cases isAdmin={isAdmin}/>}
+   {screen==='medical_evaluation'&&<ModulePlaceholder title="MEDICAL / Evaluation" text="現場評価・所見・テスト結果を記録する画面です。"/>}
+   {screen==='medical_treatment'&&<ModulePlaceholder title="MEDICAL / Treatment" text="処置・治療・対応履歴を記録する画面です。"/>}
+   {screen==='medical_rehab'&&<FmsHub initialTab="rehab" compact pageTitle="MEDICAL / Rehabilitation"/>}
+   {screen==='medical_rtp'&&<ModulePlaceholder title="MEDICAL / Return to Play" text="段階的復帰と最終復帰判断を記録する画面です。"/>}
+   {screen==='development_evaluation'&&<ModulePlaceholder title="DEVELOPMENT / Player Evaluation" text="選手評価を蓄積し、成長を追跡する画面です。"/>}
+   {screen==='development_objectives'&&<ModulePlaceholder title="DEVELOPMENT / Objectives" text="個人・チームの目標と進捗を管理する画面です。"/>}
+   {screen==='development_reports'&&<Reports profile={profile} isAdmin={isAdmin}/>}
+   {screen==='development_video'&&<FmsHub initialTab="video" compact pageTitle="DEVELOPMENT / Video"/>}
+   {screen==='communication_chat'&&<StaffChat profile={profile} isAdmin={isAdmin}/>}
+   {screen==='communication_announcement'&&<ModulePlaceholder title="COMMUNICATION / Announcement" text="チーム全体・カテゴリー別のお知らせ配信画面です。"/>}
+   {screen==='communication_notifications'&&<ModulePlaceholder title="COMMUNICATION / Notifications" text="通知履歴と既読状況を管理する画面です。"/>}
+   {screen==='management_accounts'&&isAdmin&&<Admin/>}
+   {screen==='management_permissions'&&<ModulePlaceholder title="MANAGEMENT / Permissions" text="ロール・閲覧範囲・編集権限を管理する画面です。"/>}
+   {screen==='management_data'&&<FmsHub initialTab="report" compact pageTitle="MANAGEMENT / Data"/>}
+   {screen==='management_settings'&&<ModulePlaceholder title="MANAGEMENT / Settings" text="KTRS FMS全体の設定を管理する画面です。"/>}
  </Shell>;
 }
 
@@ -108,11 +131,35 @@ function Auth(){
 function Pending({status,reason,onLogout}:{status?:Approval;reason?:string|null;onLogout:()=>void}){return <Center><div className="authCard"><h2>{status==='rejected'?'アカウントは承認されていません':'管理者の承認待ちです'}</h2><p>{status==='rejected'?(reason||'管理者にお問い合わせください。'):'承認後にKTRS FMSを利用できます。'}</p><button onClick={onLogout}>ログアウト</button></div></Center>}
 
 function Shell({profile,isAdmin,screen,setScreen,alerts,onLogout,children}:any){
- const nav:[Screen,string][]=[['team','チーム状況'],['reports','選手報告'],['players','選手一覧'],['case','記録・判断'],['fms','FMS'],['chat','チャット']];
- const alertCount=(k:Screen)=>Number(alerts?.[k]||0);
- return <><header><div><b>KTRS FMS</b><span> FOOTBALL MANAGEMENT SYSTEM</span></div><nav>{nav.map(([k,l])=>{const n=alertCount(k);return <button key={k} className={(screen===k?'active ':'')+(n>0?'unreadTab':'')} onClick={()=>setScreen(k)}>{l}{n>0&&<em>{n}</em>}</button>})}{isAdmin&&(()=>{const n=alertCount('admin');return <button className={(screen==='admin'?'active ':'')+(n>0?'unreadTab':'')} onClick={()=>setScreen('admin')}>管理{n>0&&<em>{n}</em>}</button>})()}</nav><div className="user">{profile?.full_name||''}<button onClick={onLogout}>ログアウト</button></div></header><main>{children}</main><footer>© K-TRAINERS. All rights reserved.<br/><span>傷害情報は認証されたサーバーに保存されます。</span></footer></>;
+ const [open,setOpen]=useState<Record<string,boolean>>({TEAM:true,SCHEDULE:false,PERFORMANCE:false,MEDICAL:true,DEVELOPMENT:false,COMMUNICATION:false,MANAGEMENT:false});
+ const groups:{key:string;label:string;items:[Screen,string][]}[]=[
+   {key:'TEAM',label:'TEAM',items:[['team_players','Players'],['team_staff','Staff'],['team_teams','Teams']]},
+   {key:'SCHEDULE',label:'SCHEDULE',items:[['schedule_training','Training'],['schedule_games','Games'],['schedule_events','Events'],['schedule_medical','Medical']]},
+   {key:'PERFORMANCE',label:'PERFORMANCE',items:[['performance_physical','Physical'],['performance_gps','GPS'],['performance_body','Body Composition'],['performance_benchmark','Benchmark']]},
+   {key:'MEDICAL',label:'MEDICAL',items:[['medical_injury','Injury'],['medical_evaluation','Evaluation'],['medical_treatment','Treatment'],['medical_rehab','Rehabilitation'],['medical_rtp','Return to Play']]},
+   {key:'DEVELOPMENT',label:'DEVELOPMENT',items:[['development_evaluation','Player Evaluation'],['development_objectives','Objectives'],['development_reports','Reports'],['development_video','Video']]},
+   {key:'COMMUNICATION',label:'COMMUNICATION',items:[['communication_chat','Chat'],['communication_announcement','Announcement'],['communication_notifications','Notifications']]},
+   {key:'MANAGEMENT',label:'MANAGEMENT',items:[['management_accounts','Accounts'],['management_permissions','Permissions'],['management_data','Data'],['management_settings','Settings']]}
+ ];
+ const alertFor=(s:Screen)=>s==='team_players'?Number(alerts?.players||0):s==='medical_injury'?Number(alerts?.case||0):s==='development_reports'?Number(alerts?.reports||0):s==='communication_chat'?Number(alerts?.chat||0):s==='management_accounts'?Number(alerts?.admin||0):0;
+ return <div className="appFrame">
+   <aside className="mainSidebar">
+     <div className="sidebarBrand"><b>KTRS FMS</b><span>FOOTBALL MANAGEMENT SYSTEM</span></div>
+     <button className={'sidebarHome '+(screen==='home'?'active':'')} onClick={()=>setScreen('home')}>HOME</button>
+     {groups.map(g=><div className="navGroup" key={g.key}>
+       <button className={'navGroupHead '+(g.items.some(([k])=>k===screen)?'activeGroup':'')} onClick={()=>setOpen(o=>({...o,[g.key]:!o[g.key]}))}>
+         <span>{g.label}</span><span className="chev">{open[g.key]?'−':'＋'}</span>
+       </button>
+       {open[g.key]&&<div className="navChildren">{g.items.filter(([k])=>isAdmin||!k.startsWith('management_')).map(([k,l])=>{const n=alertFor(k);return <button key={k} className={screen===k?'active':''} onClick={()=>setScreen(k)}><span>{l}</span>{n>0&&<em>{n}</em>}</button>})}</div>}
+     </div>)}
+   </aside>
+   <div className="appContent">
+     <header className="topHeader"><div><b>KTRS FMS</b><span> K-trainers Football Management System</span></div><div className="user">{profile?.full_name||''}<button onClick={onLogout}>ログアウト</button></div></header>
+     <main>{children}</main>
+     <footer>© K-TRAINERS. All rights reserved.<br/><span>傷害情報は認証されたサーバーに保存されます。</span></footer>
+   </div>
+ </div>;
 }
-
 
 function PlayerPortal({profile,session,onLogout}:{profile:Profile;session:any;onLogout:()=>void}){
  const [screen,setScreen]=useState<PlayerScreen>('mypage');
@@ -260,6 +307,15 @@ function StaffChat({profile,isAdmin}:{profile:Profile|null;isAdmin:boolean}){
  <div className="panel chatComposer"><h3>メッセージを作成</h3><label>宛先</label><select value={recipient} onChange={e=>setRecipient(e.target.value)}><option value="">宛先を選択</option>{people.filter(p=>p.id!==profile?.id).map(p=><option value={p.id} key={p.id}>{p.full_name}（{p.role==='player'?'選手':'スタッフ'}）</option>)}</select><label>メッセージ</label><textarea rows={8} maxLength={4000} value={body} onChange={e=>setBody(e.target.value)} placeholder="メッセージを入力"/><button disabled={!recipient||!body.trim()} onClick={()=>setConfirm(true)}>送信内容を確認</button></div></div>
  {confirm&&<div className="confirmOverlay"><div className="confirmCard"><h3>送信内容の確認</h3><p><b>宛先：</b>{nameOf(recipient)}</p><div className="confirmMessage">{body}</div><p className="fine">この内容で送信しますか？</p><div className="actions"><button onClick={send}>送信を確定</button><button className="secondary" onClick={()=>setConfirm(false)}>戻って修正</button></div></div></div>}
  {msg&&<div className="notice">{msg}</div>}</section>;
+}
+
+function ModulePlaceholder({title,text}:{title:string;text:string}){return <section><Title t={title} s={text}/><div className="panel"><h3>画面構成を準備済み</h3><p>{text}</p><p className="fine">既存データ構造を壊さず、このメニュー配下に機能を追加できる状態にしています。</p></div></section>}
+
+function DirectoryView({mode}:{mode:'staff'|'teams'}){
+ const [rows,setRows]=useState<any[]>([]);
+ useEffect(()=>{if(mode==='staff')supabase.from('profiles').select('id,full_name,staff_title,avatar_path').eq('role','staff').order('full_name').then(({data})=>setRows(data||[]));else supabase.from('teams').select('*').order('name').then(({data})=>setRows(data||[]))},[mode]);
+ if(mode==='staff')return <section><Title t="TEAM / Staff" s="スタッフ情報と役職"/><div className="tableWrap"><table><thead><tr><th>氏名</th><th>役職</th></tr></thead><tbody>{rows.map(r=><tr key={r.id}><td><div className="personCell"><Avatar path={r.avatar_path} name={r.full_name} size={36}/><b>{r.full_name}</b></div></td><td>{r.staff_title||'-'}</td></tr>)}</tbody></table></div></section>;
+ return <section><Title t="TEAM / Teams" s="チーム・カテゴリー管理"/><div className="tableWrap"><table><thead><tr><th>チーム名</th><th>カテゴリー</th><th>学年</th></tr></thead><tbody>{rows.map(r=><tr key={r.id}><td><b>{r.name}</b></td><td>{r.category||'-'}</td><td>{r.school_year||'-'}</td></tr>)}</tbody></table></div></section>;
 }
 
 function Team({isAdmin}:{isAdmin:boolean}){
