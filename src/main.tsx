@@ -76,8 +76,8 @@ function App(){
    {error&&<div className="error">{error}</div>}
    {screen==='home'&&<Team isAdmin={isAdmin}/>}
    {screen==='team_players'&&<Players isAdmin={isAdmin}/>}
-   {screen==='team_staff'&&<DirectoryView mode="staff"/>}
-   {screen==='team_teams'&&<DirectoryView mode="teams"/>}
+   {screen==='team_staff'&&<DirectoryView mode="staff" isAdmin={isAdmin}/>}
+   {screen==='team_teams'&&<DirectoryView mode="teams" isAdmin={isAdmin}/>}
    {screen==='schedule_training'&&<FmsHub initialTab="schedule" compact pageTitle="SCHEDULE / Training"/>}
    {screen==='schedule_games'&&<FmsHub initialTab="schedule" compact pageTitle="SCHEDULE / Games"/>}
    {screen==='schedule_events'&&<FmsHub initialTab="schedule" compact pageTitle="SCHEDULE / Events"/>}
@@ -311,10 +311,21 @@ function StaffChat({profile,isAdmin}:{profile:Profile|null;isAdmin:boolean}){
 
 function ModulePlaceholder({title,text}:{title:string;text:string}){return <section><Title t={title} s={text}/><div className="panel"><h3>画面構成を準備済み</h3><p>{text}</p><p className="fine">既存データ構造を壊さず、このメニュー配下に機能を追加できる状態にしています。</p></div></section>}
 
-function DirectoryView({mode}:{mode:'staff'|'teams'}){
- const [rows,setRows]=useState<any[]>([]);
- useEffect(()=>{if(mode==='staff')supabase.from('profiles').select('id,full_name,staff_title,avatar_path').eq('role','staff').order('full_name').then(({data})=>setRows(data||[]));else supabase.from('teams').select('*').order('name').then(({data})=>setRows(data||[]))},[mode]);
- if(mode==='staff')return <section><Title t="TEAM / Staff" s="スタッフ情報と役職"/><div className="tableWrap"><table><thead><tr><th>氏名</th><th>役職</th></tr></thead><tbody>{rows.map(r=><tr key={r.id}><td><div className="personCell"><Avatar path={r.avatar_path} name={r.full_name} size={36}/><b>{r.full_name}</b></div></td><td>{r.staff_title||'-'}</td></tr>)}</tbody></table></div></section>;
+function DirectoryView({mode,isAdmin}:{mode:'staff'|'teams';isAdmin:boolean}){
+ const [rows,setRows]=useState<any[]>([]),[edit,setEdit]=useState<any|null>(null),[deleteTarget,setDeleteTarget]=useState<any|null>(null),[deleteStage,setDeleteStage]=useState<1|2>(1),[msg,setMsg]=useState('');
+ async function load(){if(mode==='staff'){const {data,error}=await supabase.from('profiles').select('id,full_name,staff_title,avatar_path').eq('role','staff').order('full_name');if(error)setMsg(error.message);setRows(data||[])}else{const {data,error}=await supabase.from('teams').select('*').order('name');if(error)setMsg(error.message);setRows(data||[])}}
+ useEffect(()=>{load()},[mode]);
+ async function saveStaff(){if(!edit)return;const {error}=await supabase.rpc('admin_update_staff_profile',{p_user_id:edit.id,p_full_name:edit.full_name,p_staff_title:edit.staff_title||''});setMsg(error?error.message:'スタッフ情報を更新しました');if(!error){setEdit(null);load()}}
+ async function deleteStaff(){
+   if(!deleteTarget)return;
+   if(deleteStage===1){setDeleteStage(2);return}
+   const {error}=await supabase.rpc('admin_delete_staff',{p_staff_id:deleteTarget.id});
+   setMsg(error?error.message:'スタッフを削除しました');
+   if(!error){setDeleteTarget(null);setDeleteStage(1);load()}
+ }
+ if(mode==='staff')return <section><Title t="TEAM / Staff" s="スタッフ情報と役職"/>{msg&&<div className="notice">{msg}</div>}<div className="tableWrap"><table><thead><tr><th>氏名</th><th>役職</th>{isAdmin&&<th>操作</th>}</tr></thead><tbody>{rows.map(r=><tr key={r.id}><td><div className="personCell"><Avatar path={r.avatar_path} name={r.full_name} size={36}/><b>{r.full_name}</b></div></td><td>{r.staff_title||'-'}</td>{isAdmin&&<td><div className="actions"><button onClick={()=>setEdit({...r})}>編集</button><button className="dangerBtn" onClick={()=>{setDeleteTarget(r);setDeleteStage(1)}}>削除</button></div></td>}</tr>)}</tbody></table></div>
+ {edit&&<div className="panel form"><h3>スタッフ情報を編集</h3><div className="grid2"><input placeholder="氏名" value={edit.full_name||''} onChange={e=>setEdit({...edit,full_name:e.target.value})}/><input placeholder="役職" value={edit.staff_title||''} onChange={e=>setEdit({...edit,staff_title:e.target.value})}/></div><div className="actions"><button onClick={saveStaff}>変更を保存</button><button className="secondary" onClick={()=>setEdit(null)}>キャンセル</button></div></div>}
+ {deleteTarget&&<div className="confirmOverlay"><div className="confirmCard"><h3>{deleteStage===1?'スタッフ削除の確認':'最終確認'}</h3><p><b>{deleteTarget.full_name}</b> を削除します。</p>{deleteStage===1?<p className="fine">スタッフのログインアカウントも削除されます。過去記録に担当者として紐づく場合は履歴保全のため削除を停止します。</p>:<p className="error">この操作は取り消せません。本当に削除しますか？</p>}<div className="actions"><button className="dangerBtn" onClick={deleteStaff}>{deleteStage===1?'次へ':'削除を確定'}</button><button className="secondary" onClick={()=>{setDeleteTarget(null);setDeleteStage(1)}}>キャンセル</button></div></div></div>}</section>;
  return <section><Title t="TEAM / Teams" s="チーム・カテゴリー管理"/><div className="tableWrap"><table><thead><tr><th>チーム名</th><th>カテゴリー</th><th>学年</th></tr></thead><tbody>{rows.map(r=><tr key={r.id}><td><b>{r.name}</b></td><td>{r.category||'-'}</td><td>{r.school_year||'-'}</td></tr>)}</tbody></table></div></section>;
 }
 
