@@ -9,7 +9,7 @@ type Approval='pending'|'approved'|'rejected';
 type Profile={id:string;role:Role;full_name:string;school_grade:number|null;position:string|null;jersey_number:number|null;height_cm:number|null;weight_kg:number|null;dominant_foot:string|null;origin_team:string|null;avatar_path:string|null;player_registration_number:string|null;staff_title:string|null;team_id:number|null};
 type ApprovalRow={user_id:string;status:Approval;rejection_reason:string|null};
 type Screen='home'|'team_players'|'team_staff'|'team_teams'|'schedule_training'|'schedule_games'|'schedule_events'|'schedule_medical'|'performance_physical'|'performance_gps'|'performance_gps_game'|'performance_gps_tr'|'performance_body'|'performance_benchmark'|'medical_injury'|'medical_evaluation'|'medical_treatment'|'medical_rehab'|'medical_rtp'|'development_evaluation'|'development_objectives'|'development_reports'|'development_video'|'communication_chat'|'communication_announcement'|'communication_notifications'|'management_accounts'|'management_permissions'|'management_data'|'management_settings'|'set_categories'|'set_account';
-type PlayerScreen='mypage'|'schedule'|'report'|'history'|'medical'|'rehab'|'rtp'|'physical'|'gps'|'messages'|'chat'|'settings';
+type PlayerScreen='mypage'|'condition'|'schedule'|'report'|'history'|'medical'|'rehab'|'rtp'|'physical'|'gps'|'messages'|'chat'|'settings';
 
 const statusLabel:Record<string,string>={needs_attention:'要対応',rehab:'リハビリ中',observation:'経過観察',available:'問題なし'};
 const statusClass:Record<string,string>={needs_attention:'danger',rehab:'info',observation:'warn',available:'ok'};
@@ -80,7 +80,7 @@ function App(){
 
  return <Shell profile={profile} isAdmin={isAdmin} screen={screen} setScreen={changeScreen} alerts={alerts} onLogout={()=>supabase.auth.signOut()}>
    {error&&<div className="error">{error}</div>}
-   {screen==='home'&&<Team isAdmin={isAdmin} profile={profile}/>}
+   {screen==='home'&&<><StaffAutoAlerts/><Team isAdmin={isAdmin} profile={profile}/></>}
    {screen==='team_players'&&<Players isAdmin={isAdmin}/>}
    {screen==='team_staff'&&<DirectoryView mode="staff" isAdmin={isAdmin}/>}
    {screen==='team_teams'&&<DirectoryView mode="teams" isAdmin={isAdmin}/>}
@@ -102,7 +102,7 @@ function App(){
    {screen==='development_evaluation'&&<ModulePlaceholder title="DEVELOPMENT / Player Evaluation" text="選手評価を蓄積し、成長を追跡する画面です。"/>}
    {screen==='development_objectives'&&<ModulePlaceholder title="DEVELOPMENT / Objectives" text="個人・チームの目標と進捗を管理する画面です。"/>}
    {screen==='development_reports'&&<Reports profile={profile} isAdmin={isAdmin}/>}
-   {screen==='development_video'&&<FmsHub initialTab="video" compact pageTitle="DEVELOPMENT / Video"/>}
+   {screen==='development_video'&&<VideoClipManager profile={profile}/>}
    {screen==='communication_chat'&&<StaffChat profile={profile} isAdmin={isAdmin}/>}
    {screen==='communication_announcement'&&<ModulePlaceholder title="COMMUNICATION / Announcement" text="チーム全体・カテゴリー別のお知らせ配信画面です。"/>}
    {screen==='communication_notifications'&&<ModulePlaceholder title="COMMUNICATION / Notifications" text="通知履歴と既読状況を管理する画面です。"/>}
@@ -191,7 +191,7 @@ function PlayerPortal({profile,session,onLogout}:{profile:Profile;session:any;on
  async function loadPlayerAlerts(){const [{count:m},{count:ch}]=await Promise.all([supabase.from('player_messages').select('id',{count:'exact',head:true}).eq('player_id',profile.id).eq('is_read',false),supabase.from('chat_messages').select('id',{count:'exact',head:true}).eq('recipient_id',profile.id).is('read_at',null)]);setAlerts({messages:Number(m||0),chat:Number(ch||0)})}
  async function changePlayerScreen(next:PlayerScreen){setScreen(next);if(next==='messages'){await supabase.from('player_messages').update({is_read:true}).eq('player_id',profile.id).eq('is_read',false);setAlerts(a=>({...a,messages:0}))}if(next==='chat'){await supabase.from('chat_messages').update({read_at:new Date().toISOString()}).eq('recipient_id',profile.id).is('read_at',null);setAlerts(a=>({...a,chat:0}))}}
  const groups:{key:string;label:string;items:[PlayerScreen,string][]}[]=[
-   {key:'MEDICAL',label:'MEDICAL',items:[['report','ケガの報告'],['history','ケガの履歴'],['medical','現在の傷害'],['rehab','リハビリ'],['rtp','Return to Play']]},
+   {key:'MEDICAL',label:'MEDICAL',items:[['condition','朝のコンディション'],['report','ケガの報告'],['history','ケガの履歴'],['medical','現在の傷害'],['rehab','リハビリ'],['rtp','Return to Play']]},
    {key:'PERFORMANCE',label:'PERFORMANCE',items:[['physical','フィジカル'],['gps','GPS']]},
    {key:'COMMUNICATION',label:'COMMUNICATION',items:[['schedule','スケジュール'],['messages','お知らせ'],['chat','チャット']]},
    {key:'SETTINGS',label:'SETTINGS',items:[['settings','設定']]}
@@ -206,7 +206,7 @@ function PlayerPortal({profile,session,onLogout}:{profile:Profile;session:any;on
      <header className="topHeader"><div><b>KTRS FMS</b><span> PLAYER PORTAL</span></div><div className="user"><LiveDateTime/><span className="headerUserName">{profile.full_name} さん</span><button onClick={onLogout}>ログアウト</button></div></header>
      <main className="playerMain">
        {screen==='mypage'&&<PlayerMyPage profile={profile}/>}
-       {screen==='schedule'&&<PlayerSchedule profile={profile}/>}
+       {screen==='condition'&&<PlayerConditionCheck profile={profile}/>} {screen==='schedule'&&<PlayerSchedule profile={profile}/>}
        {screen==='report'&&<PlayerInjuryReport profile={profile} onDone={()=>changePlayerScreen('history')}/>}
        {screen==='history'&&<PlayerInjuryHistory profile={profile}/>}
        {screen==='medical'&&<PlayerMedicalOverview profile={profile}/>}
@@ -231,6 +231,7 @@ function GameAnalysis({profile}:{profile:Profile|null}){
  const [comment,setComment]=useState('');
  const [media,setMedia]=useState<any[]>([]);
  const [evals,setEvals]=useState<Record<string,{grade:string;comment:string}>>({});
+ const [appearances,setAppearances]=useState<Record<string,{position:string;minutes_played:string;source:string}>>({});
  const [files,setFiles]=useState<File[]>([]);
  const [msg,setMsg]=useState('');
  const [saving,setSaving]=useState(false);
@@ -246,14 +247,16 @@ function GameAnalysis({profile}:{profile:Profile|null}){
  }
  async function openGame(game:any){
    setSelected(game);setMsg('');setFiles([]);
-   const [{data:r},{data:e}]=await Promise.all([
+   const [{data:r},{data:e},{data:a}]=await Promise.all([
      supabase.from('game_reviews').select('*').eq('schedule_id',game.id).maybeSingle(),
-     supabase.from('player_game_evaluations').select('player_id,grade,comment').eq('schedule_id',game.id)
+     supabase.from('player_game_evaluations').select('player_id,grade,comment').eq('schedule_id',game.id),
+     supabase.from('game_player_appearances').select('player_id,position,minutes_played,source').eq('schedule_id',game.id)
    ]);
    setReview(r||null);setComment(r?.team_comment||'');
    const map:Record<string,{grade:string;comment:string}>={};
    (e||[]).forEach((x:any)=>map[x.player_id]={grade:x.grade,comment:x.comment||''});
    setEvals(map);
+   const amap:Record<string,{position:string;minutes_played:string;source:string}>={};(a||[]).forEach((x:any)=>amap[x.player_id]={position:x.position||'',minutes_played:x.minutes_played==null?'':String(x.minutes_played),source:x.source||'manual'});setAppearances(amap);
    if(r?.id){
      const {data:m}=await supabase.from('game_review_media').select('*').eq('game_review_id',r.id).order('created_at');
      const withUrls=await Promise.all((m||[]).map(async(x:any)=>{
@@ -266,6 +269,13 @@ function GameAnalysis({profile}:{profile:Profile|null}){
  function setEval(id:string,key:'grade'|'comment',value:string){
    setEvals(prev=>({...prev,[id]:{grade:prev[id]?.grade||'',comment:prev[id]?.comment||'',[key]:value}}));
  }
+ async function syncGpsMinutes(){
+   if(!selected)return;
+   const {data,error}=await supabase.rpc('sync_game_appearances_from_gps',{p_schedule_id:selected.id});
+   setMsg(error?error.message:(Number(data||0)>0?Number(data)+'名の出場時間をGPSから反映しました。':'GPSに選手別の実稼働時間が見つかりませんでした。'));
+   if(!error)await openGame(selected);
+ }
+ function setAppearance(id:string,key:'position'|'minutes_played',value:string){setAppearances(prev=>({...prev,[id]:{position:prev[id]?.position||'',minutes_played:prev[id]?.minutes_played||'',source:key==='minutes_played'?'manual':(prev[id]?.source||'manual'),[key]:value}}))}
  async function saveReview(){
    if(!selected||!profile?.id)return;
    setSaving(true);setMsg('');
@@ -281,6 +291,11 @@ function GameAnalysis({profile}:{profile:Profile|null}){
    const rows=Object.entries(evals).filter(([,v])=>v.grade).map(([player_id,v])=>({schedule_id:selected.id,player_id,grade:v.grade,comment:v.comment||null,evaluated_by:profile.id,updated_at:new Date().toISOString()}));
    if(rows.length){
      const {error}=await supabase.from('player_game_evaluations').upsert(rows,{onConflict:'schedule_id,player_id'});
+     if(error){setMsg(error.message);setSaving(false);return}
+   }
+   const appearanceRows=Object.entries(appearances).filter(([,v])=>v.position||v.minutes_played!=='').map(([player_id,v])=>({schedule_id:selected.id,player_id,position:v.position||null,minutes_played:v.minutes_played===''?null:Number(v.minutes_played),source:v.source||'manual',updated_by:profile.id,updated_at:new Date().toISOString()}));
+   if(appearanceRows.length){
+     const {error}=await supabase.from('game_player_appearances').upsert(appearanceRows,{onConflict:'schedule_id,player_id'});
      if(error){setMsg(error.message);setSaving(false);return}
    }
    for(const file of files){
@@ -309,6 +324,7 @@ function GameAnalysis({profile}:{profile:Profile|null}){
      <div className="panel gameAnalysisHeader"><button className="secondary" onClick={()=>setSelected(null)}>← 試合一覧</button><div><span>{selected.schedule_date}</span><h2>{selected.opponent?'vs '+selected.opponent:'Game'}</h2><p>{[selected.competition_name,selected.location].filter(Boolean).join(' / ')}</p></div></div>
      <div className="panel form"><h3>試合分析コメント</h3><textarea rows={6} value={comment} onChange={e=>setComment(e.target.value)} placeholder="試合全体の振り返り、良かった点、改善点などを入力"/></div>
      <div className="panel form"><h3>写真・動画</h3><input type="file" multiple accept="image/*,video/*" onChange={e=>setFiles(Array.from(e.target.files||[]))}/>{files.length>0&&<p className="fine">{files.length}ファイルを保存時にアップロードします。</p>}<div className="gameMediaGrid">{media.map((m:any)=><div className="gameMediaItem" key={m.id}>{m.mime_type.startsWith('image/')?<img src={m.url} alt={m.file_name}/>:<video src={m.url} controls preload="metadata"/>}<div><span>{m.file_name}</span><button className="dangerBtn" onClick={()=>removeMedia(m)}>削除</button></div></div>)}</div></div>
+     <div className="panel"><div className="sofaSectionHead"><div><span className="sectionKicker">APPEARANCE</span><h3>出場時間・ポジション</h3></div><button className="secondary" onClick={syncGpsMinutes}>GPSから出場時間を反映</button></div><div className="tableWrap"><table><thead><tr><th>選手</th><th>ポジション</th><th>出場時間</th><th>入力元</th></tr></thead><tbody>{players.map((p:any)=><tr key={p.id}><td>{p.full_name}</td><td><select value={appearances[p.id]?.position||p.position||''} onChange={e=>setAppearance(p.id,'position',e.target.value)}><option value="">-</option><option>GK</option><option>DF</option><option>MF</option><option>FW</option></select></td><td><input type="number" min="0" step="0.1" value={appearances[p.id]?.minutes_played||''} onChange={e=>setAppearance(p.id,'minutes_played',e.target.value)} placeholder="分"/></td><td>{appearances[p.id]?.source==='gps'?'GPS':'手入力'}</td></tr>)}</tbody></table></div></div>
      <div className="panel"><div className="sofaSectionHead"><div><span className="sectionKicker">PLAYER RATING</span><h3>選手評価 A〜E</h3></div></div><div className="tableWrap"><table><thead><tr><th>選手</th><th>学年/Pos</th><th>評価</th><th>コメント</th></tr></thead><tbody>{players.map((p:any)=><tr key={p.id}><td><div className="personCell"><Avatar path={p.avatar_path} name={p.full_name} size={34}/><b>{p.full_name}</b></div></td><td>{p.school_grade||'-'}年 / {p.position||'-'}</td><td><div className="gradeButtons">{['A','B','C','D','E'].map(g=><button key={g} className={'gradeButton '+(evals[p.id]?.grade===g?'selected grade'+g:'')} onClick={()=>setEval(p.id,'grade',g)}>{g}</button>)}</div></td><td><input value={evals[p.id]?.comment||''} onChange={e=>setEval(p.id,'comment',e.target.value)} placeholder="個別コメント"/></td></tr>)}</tbody></table></div></div>
      <div className="gameAnalysisSave"><button disabled={saving} onClick={saveReview}>{saving?'保存中...':'試合分析を保存'}</button></div>
    </div>}
@@ -748,6 +764,55 @@ function StaffChat({profile,isAdmin}:{profile:Profile|null;isAdmin:boolean}){
  {msg&&<div className="notice">{msg}</div>}</section>;
 }
 
+
+function PlayerConditionCheck({profile}:{profile:Profile}){
+ const [form,setForm]=useState<any>({sleep_hours:'',sleep_quality:3,fatigue:3,muscle_soreness:3,mood:3,pain:0,notes:''});
+ const [history,setHistory]=useState<any[]>([]),[msg,setMsg]=useState('');
+ const today=new Date().toLocaleDateString('sv-SE',{timeZone:'Asia/Tokyo'});
+ useEffect(()=>{load()},[profile.id]);
+ async function load(){const {data}=await supabase.from('daily_condition_checks').select('*').eq('player_id',profile.id).order('check_date',{ascending:false}).limit(7);setHistory(data||[]);const t=(data||[]).find((x:any)=>x.check_date===today);if(t)setForm({...t,sleep_hours:t.sleep_hours??''})}
+ async function save(){const payload={player_id:profile.id,check_date:today,sleep_hours:form.sleep_hours===''?null:Number(form.sleep_hours),sleep_quality:Number(form.sleep_quality),fatigue:Number(form.fatigue),muscle_soreness:Number(form.muscle_soreness),mood:Number(form.mood),pain:Number(form.pain),notes:form.notes||null,updated_at:new Date().toISOString()};const {error}=await supabase.from('daily_condition_checks').upsert(payload,{onConflict:'player_id,check_date'});setMsg(error?error.message:'本日のコンディションを保存しました。');if(!error)load()}
+ const score=(label:string,key:string,min:number,max:number)=><label>{label}<div className="conditionScale">{Array.from({length:max-min+1},(_,i)=>min+i).map(v=><button type="button" key={v} className={Number(form[key])===v?'active':''} onClick={()=>setForm({...form,[key]:v})}>{v}</button>)}</div></label>;
+ return <section><Title t="朝のコンディション" s="30秒で入力できます"/>{msg&&<div className="notice">{msg}</div>}<div className="panel form"><div className="grid2"><label>睡眠時間<input type="number" min="0" max="24" step=".5" value={form.sleep_hours} onChange={e=>setForm({...form,sleep_hours:e.target.value})} placeholder="時間"/></label>{score('睡眠の質 1〜5','sleep_quality',1,5)}{score('疲労 1〜5','fatigue',1,5)}{score('筋肉痛 1〜5','muscle_soreness',1,5)}{score('気分 1〜5','mood',1,5)}{score('痛み 0〜10','pain',0,10)}</div><textarea value={form.notes||''} onChange={e=>setForm({...form,notes:e.target.value})} placeholder="気になることがあれば入力"/><button onClick={save}>今日の状態を保存</button></div><div className="panel"><h3>直近7日</h3><div className="conditionHistory">{history.map((x:any)=><div key={x.id}><b>{x.check_date}</b><span>睡眠 {x.sleep_hours??'-'}h / 疲労 {x.fatigue} / 筋肉痛 {x.muscle_soreness} / 痛み {x.pain}</span></div>)}</div></div></section>;
+}
+
+function StaffAutoAlerts(){
+ const [rows,setRows]=useState<any[]>([]);
+ useEffect(()=>{supabase.from('fms_staff_alerts').select('*').order('alert_at',{ascending:false}).then(({data})=>setRows(data||[]))},[]);
+ if(!rows.length)return null;
+ return <div className="panel autoAlertPanel"><div className="sofaSectionHead"><div><span className="sectionKicker">AUTO ALERT</span><h3>要確認</h3></div><span className="navGroupAlert">{rows.length}</span></div>{rows.map((r:any,i:number)=><div className="autoAlertRow" key={r.alert_type+'-'+r.player_id+'-'+i}><b>{r.full_name}</b><span>{r.title}</span><small>{r.detail||''}</small></div>)}</div>;
+}
+
+function PlayerComprehensiveDashboard({player,onClose}:{player:any;onClose:()=>void}){
+ const [gps,setGps]=useState<any[]>([]),[evals,setEvals]=useState<any[]>([]),[conditions,setConditions]=useState<any[]>([]),[appear,setAppear]=useState<any[]>([]),[injuries,setInjuries]=useState<any[]>([]);
+ useEffect(()=>{(async()=>{const [g,e,c,a,i]=await Promise.all([
+ supabase.from('gps_player_metrics').select('*,gps_sessions(session_date,session_type,session_name)').eq('player_id',player.player_id).order('created_at',{ascending:false}).limit(8),
+ supabase.from('player_game_evaluations').select('grade,comment,created_at,player_schedule(schedule_date,opponent,competition_name)').eq('player_id',player.player_id).order('created_at',{ascending:false}).limit(10),
+ supabase.from('daily_condition_checks').select('*').eq('player_id',player.player_id).order('check_date',{ascending:false}).limit(7),
+ supabase.from('game_player_appearances').select('position,minutes_played,source,player_schedule(schedule_date,opponent)').eq('player_id',player.player_id).order('updated_at',{ascending:false}).limit(10),
+ supabase.from('injury_cases').select('injury_date,injury_name,body_part,current_status,rehab_stage').eq('player_id',player.player_id).order('injury_date',{ascending:false})
+ ]);setGps(g.data||[]);setEvals(e.data||[]);setConditions(c.data||[]);setAppear(a.data||[]);setInjuries(i.data||[])})()},[player.player_id]);
+ return <div className="confirmOverlay"><div className="confirmCard playerDashboardModal"><div className="dashboardHead"><div className="personCell"><Avatar path={player.avatar_path} name={player.full_name} size={62}/><div><h2>{player.full_name}</h2><span>{player.school_grade||'-'}年 / {player.position||'-'}</span></div></div><button className="secondary" onClick={onClose}>閉じる</button></div><div className="dashboardGrid">
+ <div className="panel"><h3>現在の状態</h3><p>{player.injury_name||'傷害なし'}</p><span className={'pill '+statusClass[player.display_status]}>{statusLabel[player.display_status]||'-'}</span></div>
+ <div className="panel"><h3>最新GPS</h3>{gps[0]?<><b>{gps[0].total_distance_m??'-'} m</b><p>最高速度 {gps[0].max_speed_kmh??'-'} km/h</p></>:<p>-</p>}</div>
+ <div className="panel"><h3>朝チェック</h3>{conditions[0]?<p>{conditions[0].check_date}｜疲労 {conditions[0].fatigue} / 痛み {conditions[0].pain}</p>:<p>未入力</p>}</div>
+ </div><div className="panel"><h3>Gameレビュー時系列</h3><div className="reviewTimeline">{evals.map((x:any,i:number)=><div key={i}><span className={'gameGrade grade'+x.grade}>{x.grade}</span><div><b>{x.player_schedule?.schedule_date||''} {x.player_schedule?.opponent?'vs '+x.player_schedule.opponent:''}</b><p>{x.comment||'コメントなし'}</p></div></div>)}</div></div><div className="grid2"><div className="panel"><h3>出場履歴</h3>{appear.map((x:any,i:number)=><p key={i}>{x.player_schedule?.schedule_date||'-'} {x.position||'-'} / {x.minutes_played??'-'}分 {x.source==='gps'?'(GPS)':''}</p>)}</div><div className="panel"><h3>傷害履歴</h3>{injuries.map((x:any,i:number)=><p key={i}>{x.injury_date} {x.injury_name} / {statusLabel[x.current_status]||x.current_status}</p>)}</div></div></div></div>;
+}
+
+function MedicalWeeklyReports(){
+ const [rows,setRows]=useState<any[]>([]);
+ useEffect(()=>{supabase.from('medical_weekly_reports').select('*').order('generated_at',{ascending:false}).limit(12).then(({data})=>setRows(data||[]))},[]);
+ return <div className="panel weeklyMedical"><div className="sofaSectionHead"><div><span className="sectionKicker">AUTO REPORT</span><h3>水曜メディカルレポート</h3></div><small>毎週水曜 06:00 JST 自動生成</small></div>{rows.length?rows.map((r:any)=><details key={r.id}><summary><b>{r.period_start} 〜 {r.period_end}</b><span>{new Date(r.generated_at).toLocaleString('ja-JP')}</span></summary><div className="reportStats"><div><span>新規傷害報告</span><b>{r.summary?.new_injury_reports??0}</b></div><div><span>対応中ケース</span><b>{r.summary?.active_injury_cases??0}</b></div><div><span>リハビリ中</span><b>{r.summary?.rehab_cases??0}</b></div><div><span>RTP判断</span><b>{r.summary?.rtp_decisions??0}</b></div></div></details>):<div className="empty">次回の水曜日に最初のレポートが自動生成されます。</div>}</div>;
+}
+
+function VideoClipManager({profile}:{profile:Profile|null}){
+ const [videos,setVideos]=useState<any[]>([]),[players,setPlayers]=useState<any[]>([]),[clips,setClips]=useState<any[]>([]),[videoId,setVideoId]=useState(''),[title,setTitle]=useState(''),[start,setStart]=useState('0'),[end,setEnd]=useState(''),[tag,setTag]=useState(''),[comment,setComment]=useState(''),[tagged,setTagged]=useState<string[]>([]),[msg,setMsg]=useState('');
+ useEffect(()=>{load()},[]);
+ async function load(){const [v,p,c]=await Promise.all([supabase.from('videos').select('*').order('created_at',{ascending:false}),supabase.from('profiles').select('id,full_name,school_grade,position').eq('role','player').eq('is_hidden',false).order('school_grade',{ascending:false}).order('full_name'),supabase.from('video_clips').select('*,video_clip_players(player_id)').order('created_at',{ascending:false})]);setVideos(v.data||[]);setPlayers(p.data||[]);setClips(c.data||[])}
+ async function save(){if(!profile?.id||!videoId||!title.trim())return;const {data,error}=await supabase.from('video_clips').insert({video_id:Number(videoId),title:title.trim(),start_seconds:Number(start||0),end_seconds:end?Number(end):null,tag:tag||null,comment:comment||null,created_by:profile.id}).select().single();if(error){setMsg(error.message);return}if(tagged.length){const {error:e}=await supabase.from('video_clip_players').insert(tagged.map(player_id=>({clip_id:data.id,player_id})));if(e){setMsg(e.message);return}}setMsg('動画クリップを保存しました。');setTitle('');setTagged([]);load()}
+ return <section><Title t="DEVELOPMENT / Video" s="動画の時間指定と選手タグ"/>{msg&&<div className="notice">{msg}</div>}<div className="panel form"><h3>クリップを追加</h3><select value={videoId} onChange={e=>setVideoId(e.target.value)}><option value="">動画を選択</option>{videos.map(v=><option key={v.id} value={v.id}>{v.title||('Video '+v.id)}</option>)}</select><div className="grid2"><input value={title} onChange={e=>setTitle(e.target.value)} placeholder="クリップ名"/><input value={tag} onChange={e=>setTag(e.target.value)} placeholder="タグ（例：守備切替）"/><input type="number" value={start} onChange={e=>setStart(e.target.value)} placeholder="開始 秒"/><input type="number" value={end} onChange={e=>setEnd(e.target.value)} placeholder="終了 秒"/></div><textarea value={comment} onChange={e=>setComment(e.target.value)} placeholder="コメント"/><div className="recipientChecklist">{players.map(p=><label className="recipientCheck" key={p.id}><input type="checkbox" checked={tagged.includes(p.id)} onChange={()=>setTagged(s=>s.includes(p.id)?s.filter(x=>x!==p.id):[...s,p.id])}/><span><b>{p.full_name}</b><small>{p.school_grade||'-'}年 / {p.position||'-'}</small></span></label>)}</div><button onClick={save} disabled={!videoId||!title.trim()}>クリップを保存</button></div><div className="panel"><h3>保存済みクリップ</h3>{clips.map((x:any)=><div className="clipRow" key={x.id}><div><b>{x.title}</b><span>{x.start_seconds}s 〜 {x.end_seconds??'終了まで'}s</span><small>{x.tag||''} {x.comment||''}</small></div><span>{(x.video_clip_players||[]).length}名タグ</span></div>)}</div></section>;
+}
+
 function ModulePlaceholder({title}:{title:string;text:string}){return <section><Title t={title}/><div className="panel"><h3>画面構成を準備済み</h3></div></section>}
 
 function DirectoryView({mode,isAdmin}:{mode:'staff'|'teams';isAdmin:boolean}){
@@ -1042,6 +1107,7 @@ function Players({isAdmin}:{isAdmin:boolean}){
  const [rows,setRows]=useState<any[]>([]),[loading,setLoading]=useState(true),[msg,setMsg]=useState('');
  const [filters,setFilters]=useState({name:'',grade:'',position:'',injury:'',status:''});
  const [edit,setEdit]=useState<any|null>(null);
+ const [dashboardPlayer,setDashboardPlayer]=useState<any|null>(null);
  const [selected,setSelected]=useState<string[]>([]);
  const [showHidden,setShowHidden]=useState(false);
  const [confirmAction,setConfirmAction]=useState<{kind:'hide'|'show'|'delete';ids:string[];stage:1|2}|null>(null);
@@ -1104,9 +1170,9 @@ function Players({isAdmin}:{isAdmin:boolean}){
  <div className="filters"><input placeholder="氏名" value={filters.name} onChange={e=>setFilters({...filters,name:e.target.value})}/><select value={filters.grade} onChange={e=>setFilters({...filters,grade:e.target.value})}><option value="">全学年</option><option value="1">1年</option><option value="2">2年</option><option value="3">3年</option></select><select value={filters.position} onChange={e=>setFilters({...filters,position:e.target.value})}><option value="">全ポジション</option>{positions.map(p=><option key={p}>{p}</option>)}</select><input placeholder="傷害名で検索" value={filters.injury} onChange={e=>setFilters({...filters,injury:e.target.value})}/><select value={filters.status} onChange={e=>setFilters({...filters,status:e.target.value})}><option value="">全対応</option><option value="needs_attention">要対応</option><option value="rehab">リハビリ中</option><option value="observation">経過観察</option><option value="available">問題なし</option></select></div>
  {isAdmin&&<div className="bulkBar"><label><input type="checkbox" checked={showHidden} onChange={e=>setShowHidden(e.target.checked)}/> 非表示の選手を表示</label><span>{selected.length}名選択中</span><button disabled={!selected.length} onClick={()=>beginAction('hide',selected)}>まとめて非表示</button><button className="secondary" disabled={!selected.length} onClick={()=>beginAction('show',selected)}>まとめて再表示</button><button className="dangerBtn" disabled={!selected.length} onClick={()=>beginAction('delete',selected)}>まとめて削除</button></div>}
  {msg&&<div className="notice">{msg}</div>}
- {loading?<p>読み込み中...</p>:<div className="tableWrap"><table><thead><tr>{isAdmin&&<th><input type="checkbox" checked={allVisibleSelected} onChange={toggleAll}/></th>}<th>氏名</th><th>学年/Pos</th><th>傷害</th><th>対応</th><th>本日</th>{isAdmin&&<th>管理</th>}</tr></thead><tbody>{filtered.map(r=><tr key={r.player_id} className={r.is_hidden?'hiddenRow':''}>{isAdmin&&<td><input type="checkbox" checked={selected.includes(r.player_id)} onChange={()=>toggleOne(r.player_id)}/></td>}<td><div className="personCell"><Avatar path={r.avatar_path} name={r.full_name} size={38}/><div><b>{r.full_name}</b>{r.is_hidden&&<small>非表示</small>}</div></div></td><td>{r.school_grade||'-'}年 / {r.position||'-'}</td><td>{r.injury_name||'なし'}{r.body_part&&<small>{r.body_part}</small>}</td><td><span className={'pill '+statusClass[r.display_status]}>{statusLabel[r.display_status]}</span>{r.display_status==='rehab'&&r.rehab_day&&<small>Rehab Day {r.rehab_day}</small>}</td><td>{availabilityLabel[r.today_availability]||'-'}{r.pain_score!=null&&<small>Pain {r.pain_score}/10</small>}</td>{isAdmin&&<td><div className="rowActions"><button onClick={()=>setEdit({...r})}>編集</button>{r.is_hidden?<button className="secondary" onClick={()=>beginAction('show',[r.player_id])}>再表示</button>:<button className="secondary" onClick={()=>beginAction('hide',[r.player_id])}>非表示</button>}<button className="dangerBtn" onClick={()=>beginAction('delete',[r.player_id])}>削除</button></div></td>}</tr>)}</tbody></table>{!filtered.length&&<div className="empty">該当する選手はいません。</div>}</div>}
+ {loading?<p>読み込み中...</p>:<div className="tableWrap"><table><thead><tr>{isAdmin&&<th><input type="checkbox" checked={allVisibleSelected} onChange={toggleAll}/></th>}<th>氏名</th><th>学年/Pos</th><th>傷害</th><th>対応</th><th>本日</th><th>詳細</th>{isAdmin&&<th>管理</th>}</tr></thead><tbody>{filtered.map(r=><tr key={r.player_id} className={r.is_hidden?'hiddenRow':''}>{isAdmin&&<td><input type="checkbox" checked={selected.includes(r.player_id)} onChange={()=>toggleOne(r.player_id)}/></td>}<td><div className="personCell"><Avatar path={r.avatar_path} name={r.full_name} size={38}/><div><b>{r.full_name}</b>{r.is_hidden&&<small>非表示</small>}</div></div></td><td>{r.school_grade||'-'}年 / {r.position||'-'}</td><td>{r.injury_name||'なし'}{r.body_part&&<small>{r.body_part}</small>}</td><td><span className={'pill '+statusClass[r.display_status]}>{statusLabel[r.display_status]}</span>{r.display_status==='rehab'&&r.rehab_day&&<small>Rehab Day {r.rehab_day}</small>}</td><td>{availabilityLabel[r.today_availability]||'-'}{r.pain_score!=null&&<small>Pain {r.pain_score}/10</small>}</td><td><button className="secondary" onClick={()=>setDashboardPlayer(r)}>ダッシュボード</button></td>{isAdmin&&<td><div className="rowActions"><button onClick={()=>setEdit({...r})}>編集</button>{r.is_hidden?<button className="secondary" onClick={()=>beginAction('show',[r.player_id])}>再表示</button>:<button className="secondary" onClick={()=>beginAction('hide',[r.player_id])}>非表示</button>}<button className="dangerBtn" onClick={()=>beginAction('delete',[r.player_id])}>削除</button></div></td>}</tr>)}</tbody></table>{!filtered.length&&<div className="empty">該当する選手はいません。</div>}</div>}
  {isAdmin&&edit&&<div className="panel form"><h3>{edit.full_name}｜対応・参加状況を編集</h3><div className="grid2">{edit.case_id&&<select value={edit.display_status} onChange={e=>setEdit({...edit,display_status:e.target.value})}><option value="needs_attention">要対応</option><option value="rehab">リハビリ中</option><option value="observation">経過観察</option><option value="available">問題なし</option></select>}<select value={edit.today_availability} onChange={e=>setEdit({...edit,today_availability:e.target.value})}><option value="out">参加不可</option><option value="modified">別メニュー</option><option value="partial">部分参加</option><option value="full">通常参加</option></select><input type="number" min="0" max="10" placeholder="Pain 0-10" value={edit.pain_score??''} onChange={e=>setEdit({...edit,pain_score:e.target.value===''?null:Number(e.target.value)})}/>{edit.today_availability==='out'&&edit.display_status!=='rehab'&&<select value={edit.absence_reason||''} onChange={e=>setEdit({...edit,absence_reason:e.target.value})}><option value="">不参加理由を選択</option><option value="absent">欠席</option><option value="illness">体調不良</option><option value="other">その他</option></select>}</div><div className="actions"><button onClick={saveStatus}>保存</button><button className="secondary" onClick={()=>setEdit(null)}>キャンセル</button></div></div>}
- {confirmAction&&<div className="confirmOverlay"><div className="confirmCard"><h3>{confirmAction.stage===1?actionLabel+'する選手を確認':'最終確認：'+actionLabel}</h3><div className="confirmList">{actionTargets.map(r=><div key={r.player_id}>{r.full_name}　{r.school_grade||'-'}年 / {r.position||'-'}</div>)}</div>{confirmAction.kind==='delete'?<p className="dangerText">削除すると、ログインアカウント・傷害報告・ケース・フィジカルデータ・チャットなど関連データも削除され、元に戻せません。</p>:<p className="fine">{confirmAction.kind==='hide'?'非表示後もデータとログイン権限は残ります。チーム集計からは除外されます。':'再表示すると通常の選手一覧とチーム集計に戻ります。'}</p>}<div className="actions">{confirmAction.stage===1?<button onClick={()=>setConfirmAction({...confirmAction,stage:2})}>次の確認へ</button>:<button className={confirmAction.kind==='delete'?'dangerBtn':''} onClick={executeAction}>{actionLabel}を確定</button>}<button className="secondary" onClick={()=>setConfirmAction(null)}>キャンセル</button></div></div></div>}
+ {dashboardPlayer&&<PlayerComprehensiveDashboard player={dashboardPlayer} onClose={()=>setDashboardPlayer(null)}/>} {confirmAction&&<div className="confirmOverlay"><div className="confirmCard"><h3>{confirmAction.stage===1?actionLabel+'する選手を確認':'最終確認：'+actionLabel}</h3><div className="confirmList">{actionTargets.map(r=><div key={r.player_id}>{r.full_name}　{r.school_grade||'-'}年 / {r.position||'-'}</div>)}</div>{confirmAction.kind==='delete'?<p className="dangerText">削除すると、ログインアカウント・傷害報告・ケース・フィジカルデータ・チャットなど関連データも削除され、元に戻せません。</p>:<p className="fine">{confirmAction.kind==='hide'?'非表示後もデータとログイン権限は残ります。チーム集計からは除外されます。':'再表示すると通常の選手一覧とチーム集計に戻ります。'}</p>}<div className="actions">{confirmAction.stage===1?<button onClick={()=>setConfirmAction({...confirmAction,stage:2})}>次の確認へ</button>:<button className={confirmAction.kind==='delete'?'dangerBtn':''} onClick={executeAction}>{actionLabel}を確定</button>}<button className="secondary" onClick={()=>setConfirmAction(null)}>キャンセル</button></div></div></div>}
  </section>;
 }
 
@@ -1132,7 +1198,7 @@ function Reports({profile,isAdmin}:{profile:Profile|null;isAdmin:boolean}){
  }
  const ownCanEdit=(r:any)=>profile?.role==='player'&&r.player_id===profile.id;
  const changed=(r:any,k:string)=>Array.isArray(r.player_edited_fields)&&r.player_edited_fields.includes(k);
- return <section><Title t="選手報告" s="新規報告は未読時のみ上部タブが赤く表示されます"/>
+ return <section><Title t="選手報告" s="新規報告は未読時のみ上部タブが赤く表示されます"/>{profile?.role!=='player'&&<MedicalWeeklyReports/>}
  {profile?.role==='player'&&<form className="panel form" onSubmit={submit}><h3>新しい傷害・症状を報告</h3><ReportFields value={form} setValue={setForm}/><button>報告する</button></form>}
  {msg&&<div className="notice">{msg}</div>}
  <div className="tableWrap"><table><thead><tr><th>日付</th><th>症状</th><th>部位</th><th>状態</th><th>添付</th><th>編集履歴</th>{(isAdmin||profile?.role==='player')&&<th>操作</th>}</tr></thead><tbody>{rows.map(r=><tr key={r.id}><td className={changed(r,'injury_date')?'changed':''}>{r.injury_date}</td><td className={changed(r,'symptom')?'changed':''}>{r.symptom}</td><td className={changed(r,'body_part')?'changed':''}>{r.body_part}</td><td>{r.review_status==='pending'?'未確認':'確認済み'}</td><td><InjuryAttachments reportId={r.id}/></td><td>{r.player_last_edited_at?<span className="changed">選手が変更済み</span>:'-'}</td>{(isAdmin||profile?.role==='player')&&<td>{(isAdmin||ownCanEdit(r))&&<button onClick={()=>setEdit({...r})}>編集</button>} {isAdmin&&r.review_status==='pending'&&<button onClick={()=>convert(r.id)}>ケース化</button>}</td>}</tr>)}</tbody></table></div>
