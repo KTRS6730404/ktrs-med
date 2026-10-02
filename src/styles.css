@@ -172,3 +172,14 @@ main{max-width:none}
 .sortHead{background:transparent!important;color:inherit!important;border:none!important;padding:0!important;font:inherit;font-weight:700;cursor:pointer;white-space:nowrap}
 .sortHead:hover{text-decoration:underline}
 @media(max-width:1100px){.gpsChartsTop{grid-template-columns:1fr}}
+
+.gpsChartButton{appearance:none;text-align:left;color:inherit;font:inherit;cursor:zoom-in;position:relative}
+.gpsChartButton:hover{border-color:#9fb6cf}
+.expandHint{position:absolute;right:10px;bottom:8px;font-size:10px;color:#718096}
+.gpsChartModal{width:min(1100px,94vw);max-width:1100px}
+.gpsChartModal .gpsChart{max-height:68vh}
+.gpsModalHead{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px}
+.absenceBreakdown{display:flex;gap:8px;flex-wrap:wrap;padding:10px 12px;border-top:1px solid #edf1f5;background:#fbfcfe}
+.absenceBreakdown span{padding:6px 9px;border:1px solid #dde6ef;border-radius:999px;font-size:12px;background:#fff}
+.entryLabelInput{font-weight:700}
+.opponentSpacer{min-height:40px}
