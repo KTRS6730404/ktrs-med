@@ -222,3 +222,11 @@ main{max-width:none}
 .attachmentNames span{font-size:11px;padding:4px 7px;border-radius:999px;background:#eef4f8}
 .attachmentList{display:flex;flex-direction:column;gap:4px}
 .attachmentLink{background:transparent!important;border:none!important;color:#2563eb!important;padding:0!important;text-align:left;text-decoration:underline;cursor:pointer;font-size:12px}
+
+.scheduleHeaderActions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.categoryManager{margin:10px 0 14px;padding:12px;border:1px solid #dfe7ef;border-radius:10px;background:#fbfcfe}
+.categoryAddRow{display:flex;gap:8px;margin-bottom:10px}
+.categoryAddRow input{flex:1}
+.categoryManageList{display:grid;gap:6px}
+.categoryManageRow{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 10px;border:1px solid #e5ebf1;border-radius:8px;background:#fff}
+.archivedCategory{color:#8a97a6;text-decoration:line-through}
