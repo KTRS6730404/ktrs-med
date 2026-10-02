@@ -4,11 +4,11 @@ import {supabase} from './supabase';
 type Tab='schedule'|'rehab'|'library'|'gps'|'video'|'prevention'|'report'|'team';
 const statusLabel:any={needs_attention:'要対応',rehab:'リハビリ中',observation:'経過観察',available:'問題なし'};
 function day(start?:string|null){if(!start)return null;const s=new Date(start+'T00:00:00');const n=new Date();s.setHours(0,0,0,0);n.setHours(0,0,0,0);return Math.floor((n.getTime()-s.getTime())/86400000)+1}
-export default function FmsHub({initialTab='schedule',compact=false,pageTitle}:{initialTab?:Tab;compact?:boolean;pageTitle?:string}){
+export default function FmsHub({initialTab='schedule',compact=false,pageTitle,gpsCategory}:{initialTab?:Tab;compact?:boolean;pageTitle?:string;gpsCategory?:'Game'|'TR'}){
  const [tab,setTab]=useState<Tab>(initialTab);
  useEffect(()=>{setTab(initialTab)},[initialTab]);
  const tabs:[Tab,string][]=[['schedule','スケジュール'],['rehab','リハビリ・受診'],['library','メニュー'],['gps','GPS'],['video','動画'],['prevention','傷害予防'],['report','レポート'],['team','TEAM']];
- return <section><div className="title"><h1>{pageTitle||'KTRS FMS'}</h1></div>{!compact&&<div className="fmsTabs">{tabs.map(([k,l])=><button key={k} className={tab===k?'active':''} onClick={()=>setTab(k)}>{l}</button>)}</div>}{tab==='schedule'&&<Schedule/>}{tab==='rehab'&&<Rehab/>}{tab==='library'&&<Library/>}{tab==='gps'&&<Gps/>}{tab==='video'&&<Video/>}{tab==='prevention'&&<Prevention/>}{tab==='report'&&<Report/>}{tab==='team'&&<Team/>}</section>
+ return <section><div className="title"><h1>{pageTitle||'KTRS FMS'}</h1></div>{!compact&&<div className="fmsTabs">{tabs.map(([k,l])=><button key={k} className={tab===k?'active':''} onClick={()=>setTab(k)}>{l}</button>)}</div>}{tab==='schedule'&&<Schedule/>}{tab==='rehab'&&<Rehab/>}{tab==='library'&&<Library/>}{tab==='gps'&&<Gps category={gpsCategory}/>}{tab==='video'&&<Video/>}{tab==='prevention'&&<Prevention/>}{tab==='report'&&<Report/>}{tab==='team'&&<Team/>}</section>
 }
 function Schedule(){
  const blank:any={event_type:'training',title:'',starts_at:'',ends_at:'',venue:'',opponent:'',competition_name:'',training_theme:'',details:'',gps_enabled:false};
@@ -62,7 +62,7 @@ function MiniLineChart({title,subtitle,rows,series}:{title:string;subtitle:strin
  {expanded&&<div className="confirmOverlay" onClick={()=>setExpanded(false)}><div className="confirmCard gpsChartModal" onClick={e=>e.stopPropagation()}><div className="gpsModalHead"><b>{title}</b><button type="button" className="secondary" onClick={()=>setExpanded(false)}>閉じる</button></div>{chart}</div></div>}</>;
 }
 
-function Gps(){
+function Gps({category}:{category?:'Game'|'TR'}){
  const [players,setPlayers]=useState<any[]>([]),[sessions,setSessions]=useState<any[]>([]),[metrics,setMetrics]=useState<any[]>([]),[knows,setKnows]=useState<any[]>([]),[msg,setMsg]=useState('');
  const [sort,setSort]=useState<{key:string;dir:'asc'|'desc'}>({key:'athlete_name',dir:'asc'});
  const [showImport,setShowImport]=useState(false),[dragging,setDragging]=useState(false),[importFile,setImportFile]=useState<File|null>(null),[importing,setImporting]=useState(false);
@@ -171,7 +171,7 @@ function Gps(){
  const matches=Object.entries(matchGroups).map(([key,rowsAny])=>{const rows=rowsAny as any[];return {key,rows,head:rows[0]}}).sort((a:any,b:any)=>String(b.head.session_date+' '+(b.head.kickoff_time||'')).localeCompare(String(a.head.session_date+' '+(a.head.kickoff_time||''))));
  const gameMatches=matches.filter((g:any)=>(g.head.activity_type||'Game')==='Game');
  const trMatches=matches.filter((g:any)=>g.head.activity_type==='TR');
- const chartMatches=matches.filter((g:any)=>(!chartRange.from||g.head.session_date>=chartRange.from)&&(!chartRange.to||g.head.session_date<=chartRange.to));
+ const chartMatches=matches.filter((g:any)=>(!category||(g.head.activity_type||'Game')===category)&&(!chartRange.from||g.head.session_date>=chartRange.from)&&(!chartRange.to||g.head.session_date<=chartRange.to));
  const toChartRow=(g:any,mode:'per10'|'avg')=>{const rows=g.rows;const calc=(k:string)=>{const sum=rows.reduce((a:any,r:any)=>a+Number(r[k]||0),0);return mode==='per10'?sum/10:(rows.length?sum/rows.length:0)};return {key:g.key,label:g.head.session_date.slice(5).replace('-','/')+' '+(g.head.opponent||g.head.session_name||''),total_distance_m:calc('total_distance_m'),sprint_distance_m:calc('sprint_distance_m'),si:calc('si'),hi:calc('hi'),sprint_count:calc('sprint_count'),acceleration_count:calc('acceleration_count'),deceleration_count:calc('deceleration_count')}};
  const gameWeekly=chartMatches.filter((g:any)=>(g.head.activity_type||'Game')==='Game').map((g:any)=>toChartRow(g,'per10')).sort((a:any,b:any)=>String(a.key).localeCompare(String(b.key)));
  const trWeekly=chartMatches.filter((g:any)=>g.head.activity_type==='TR').map((g:any)=>toChartRow(g,'avg')).sort((a:any,b:any)=>String(a.key).localeCompare(String(b.key)));
@@ -190,18 +190,18 @@ function Gps(){
    </label>
    <div className="actions"><button disabled={!importFile||importing} onClick={importKnows}>{importing?'取込中...':'データを取り込む'}</button><button className="secondary" onClick={()=>{setShowImport(false);setImportFile(null)}}>キャンセル</button></div></div>}
    <div className="panel gpsChartFilters"><div><b>グラフ表示期間</b><small>3つのグラフに共通適用</small></div><label>開始日<input type="date" value={chartRange.from} onChange={e=>setChartRange({...chartRange,from:e.target.value})}/></label><label>終了日<input type="date" value={chartRange.to} onChange={e=>setChartRange({...chartRange,to:e.target.value})}/></label><button className="secondary" onClick={()=>setChartRange({from:'',to:''})}>全期間</button><span>Game {gameWeekly.length}件 / TR {trWeekly.length}件</span></div>
-   <div className="gpsChartSection"><div className="gpsChartSectionHead"><h3>Game</h3><span>10人換算</span></div><div className="gpsChartsTop">
+   {(!category||category==='Game')&&<div className="gpsChartSection"><div className="gpsChartSectionHead"><h3>Game</h3><span>10人換算</span></div><div className="gpsChartsTop">
      <MiniLineChart title="Volume" subtitle="Game｜10人換算｜総走行距離・スプリント距離" rows={gameWeekly} series={[{key:'total_distance_m',label:'総走行距離',unit:'m'},{key:'sprint_distance_m',label:'スプリント距離',unit:'m'}]}/>
      <MiniLineChart title="Intensity" subtitle="Game｜10人換算｜SI・HI" rows={gameWeekly} series={[{key:'si',label:'SI'},{key:'hi',label:'HI'}]}/>
      <MiniLineChart title="Actions" subtitle="Game｜10人換算｜スプリント・加速・減速" rows={gameWeekly} series={[{key:'sprint_count',label:'スプリント',unit:'回'},{key:'acceleration_count',label:'加速',unit:'回'},{key:'deceleration_count',label:'減速',unit:'回'}]}/>
-   </div></div>
-   <div className="gpsChartSection"><div className="gpsChartSectionHead"><h3>TR</h3><span>参加者平均</span></div><div className="gpsChartsTop">
+   </div></div>}
+   {(!category||category==='TR')&&<div className="gpsChartSection"><div className="gpsChartSectionHead"><h3>TR</h3><span>参加者平均</span></div><div className="gpsChartsTop">
      <MiniLineChart title="Volume" subtitle="TR｜参加者平均｜総走行距離・スプリント距離" rows={trWeekly} series={[{key:'total_distance_m',label:'総走行距離',unit:'m'},{key:'sprint_distance_m',label:'スプリント距離',unit:'m'}]}/>
      <MiniLineChart title="Intensity" subtitle="TR｜参加者平均｜SI・HI" rows={trWeekly} series={[{key:'si',label:'SI'},{key:'hi',label:'HI'}]}/>
      <MiniLineChart title="Actions" subtitle="TR｜参加者平均｜スプリント・加速・減速" rows={trWeekly} series={[{key:'sprint_count',label:'スプリント',unit:'回'},{key:'acceleration_count',label:'加速',unit:'回'},{key:'deceleration_count',label:'減速',unit:'回'}]}/>
-   </div></div>
+   </div></div>}
    <div className="gpsCategoryList">
-   {(['Game','TR'] as const).map(cat=>{const list=cat==='Game'?gameMatches:trMatches;return <details className="panel gpsCategoryCard" key={cat}>
+   {((category?[category]:['Game','TR']) as ('Game'|'TR')[]).map(cat=>{const list=cat==='Game'?gameMatches:trMatches;return <details className="panel gpsCategoryCard" key={cat}>
       <summary className="gpsCategorySummary"><b>{cat}</b><span>{list.length}件</span></summary>
       <div className="gpsMatchList">{list.length===0?<div className="empty">{cat}データはまだありません。</div>:list.map((g:any)=><details className="panel gpsMatchCard" key={g.key}>
          <summary className="gpsMatchSummary"><div><span>日付</span><b>{g.head.session_date}</b></div><div><span>{cat==='Game'?'キックオフ時間':'開始時間'}</span><b>{timeText(g.head.kickoff_time)}</b></div><div><span>{cat==='Game'?'試合会場':'TR会場'}</span><b>{g.head.venue||'-'}</b></div><div><span>{cat==='Game'?'対戦相手':'内容'}</span><b>{cat==='Game'?(g.head.opponent||'-'):(g.head.opponent||g.head.session_name||'-')}</b></div><div className="gpsSummaryActions"><em>{g.rows.length}名</em><button type="button" className="secondary" onClick={e=>{e.preventDefault();e.stopPropagation();setEditGroup({rows:g.rows,activity_type:g.head.activity_type||'Game',session_date:g.head.session_date,kickoff_time:g.head.kickoff_time||'',venue:g.head.venue||'',opponent:g.head.opponent||''})}}>修正</button></div></summary>
