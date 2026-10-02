@@ -331,6 +331,7 @@ function DirectoryView({mode,isAdmin}:{mode:'staff'|'teams';isAdmin:boolean}){
 
 
 
+
 function Team({isAdmin,profile}:{isAdmin:boolean;profile:Profile|null}){
  const [players,setPlayers]=useState<any[]>([]);
  const [messages,setMessages]=useState<any[]>([]);
@@ -347,68 +348,50 @@ function Team({isAdmin,profile}:{isAdmin:boolean;profile:Profile|null}){
  },[]);
  const iso=(d:Date)=>{const y=d.getFullYear(),m=String(d.getMonth()+1).padStart(2,'0'),day=String(d.getDate()).padStart(2,'0');return y+'-'+m+'-'+day};
  const weekStart=iso(weekDates[0]),weekEnd=iso(weekDates[6]);
+ const blank=(date:string,idx:number)=>({temp_id:'new-'+date+'-'+Date.now()+'-'+idx,schedule_date:date,entry_label:'カテゴリー '+(idx+1),event_type:'TR',opponent:'',starts_at:null,start_time:'',location:'',staff_names:[],notes:''});
 
  useEffect(()=>{load()},[]);
  async function load(){
    const [{data:p},{data:m},{data:s},{data:st}]=await Promise.all([
      supabase.from('player_directory').select('*').eq('is_hidden',false).order('school_grade',{ascending:false}).order('full_name'),
      profile?.id?supabase.from('chat_messages').select('id,sender_id,recipient_id,body,created_at,read_at').eq('recipient_id',profile.id).order('created_at',{ascending:false}).limit(5):Promise.resolve({data:[]} as any),
-     supabase.from('player_schedule').select('id,schedule_date,event_type,opponent,starts_at,location,staff_names,notes,title,category,details').is('player_id',null).gte('schedule_date',weekStart).lte('schedule_date',weekEnd).order('schedule_date').order('id'),
+     supabase.from('player_schedule').select('id,schedule_date,entry_label,event_type,opponent,starts_at,location,staff_names,notes,title,category,details').is('player_id',null).gte('schedule_date',weekStart).lte('schedule_date',weekEnd).order('schedule_date').order('id'),
      supabase.from('profiles').select('id,full_name,role').eq('role','staff').order('full_name')
    ]);
-   setPlayers(p||[]);setMessages(m||[]);setSchedule(s||[]);setStaff(st||[]);
+   const existing=s||[];
+   const seeded=[...existing];
+   weekDates.forEach((d:Date)=>{
+     const date=iso(d);
+     const dayRows=seeded.filter((x:any)=>x.schedule_date===date);
+     for(let i=dayRows.length;i<3;i++)seeded.push(blank(date,i));
+   });
+   setPlayers(p||[]);setMessages(m||[]);setSchedule(seeded);setStaff(st||[]);
  }
  const peopleMap=new Map(staff.map((x:any)=>[x.id,x.full_name]));
  const nonParticipants=players.filter(p=>p.today_availability==='out');
  const participants=Math.max(0,players.length-nonParticipants.length);
+ const reasonLabel=(p:any)=>p.display_status==='rehab'?'リハビリ':p.absence_reason==='absent'?'欠席':p.absence_reason==='illness'?'体調不良':p.absence_reason==='other'?'その他':'理由未設定';
+ const reasonCounts=nonParticipants.reduce((acc:any,p:any)=>{const k=reasonLabel(p);acc[k]=(acc[k]||0)+1;return acc},{});
  const timeOf=(v:any)=>v?new Date(v).toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit',hour12:false}):'';
  const toTs=(date:string,time:string)=>time?date+'T'+time+':00+09:00':date+'T09:00:00+09:00';
- const blank=(date:string,idx:number)=>({temp_id:'new-'+date+'-'+idx,schedule_date:date,event_type:'TR',opponent:'',starts_at:null,start_time:'',location:'',staff_names:[],notes:''});
- const entriesFor=(date:string)=>{
-   const existing=schedule.filter(x=>x.schedule_date===date);
-   const result=[...existing];
-   while(result.length<3)result.push(blank(date,result.length));
-   return result;
- };
- function patchEntry(date:string,keyId:any,key:string,value:any){
-   setSchedule(prev=>{
-     const exists=prev.some(x=>(x.id||x.temp_id)===keyId);
-     if(exists)return prev.map(x=>(x.id||x.temp_id)===keyId?{...x,[key]:value}:x);
-     return [...prev,{...blank(date,99),temp_id:keyId,[key]:value}];
-   });
- }
- function addEntry(date:string){
-   const n=entriesFor(date).length;
-   setSchedule(prev=>[...prev,blank(date,n)]);
- }
+ const entriesFor=(date:string)=>schedule.filter(x=>x.schedule_date===date);
+ function patchEntry(date:string,keyId:any,key:string,value:any){setSchedule(prev=>prev.map(x=>(x.id||x.temp_id)===keyId?{...x,[key]:value}:x))}
+ function addEntry(date:string){setSchedule(prev=>[...prev,blank(date,entriesFor(date).length)])}
  async function removeEntry(date:string,r:any){
-   if(r.id){
-     const {error}=await supabase.from('player_schedule').delete().eq('id',r.id);
-     setMsg(error?error.message:'予定を削除しました。');if(!error)load();
-   }else{
-     setSchedule(prev=>prev.filter(x=>(x.id||x.temp_id)!==(r.id||r.temp_id)));
-   }
+   if(r.id){const {error}=await supabase.from('player_schedule').delete().eq('id',r.id);setMsg(error?error.message:'予定を削除しました。');if(!error)load()}
+   else setSchedule(prev=>prev.filter(x=>(x.id||x.temp_id)!==(r.id||r.temp_id)));
  }
- function addStaff(date:string,r:any,name:string){
-   if(!name)return;
-   const arr=Array.from(new Set([...(r.staff_names||[]),name]));
-   patchEntry(date,r.id||r.temp_id,'staff_names',arr);
- }
- function removeStaff(date:string,r:any,name:string){
-   patchEntry(date,r.id||r.temp_id,'staff_names',(r.staff_names||[]).filter((x:string)=>x!==name));
- }
+ function addStaff(date:string,r:any,name:string){if(!name)return;patchEntry(date,r.id||r.temp_id,'staff_names',Array.from(new Set([...(r.staff_names||[]),name])))}
+ function removeStaff(date:string,r:any,name:string){patchEntry(date,r.id||r.temp_id,'staff_names',(r.staff_names||[]).filter((x:string)=>x!==name))}
  async function saveEntry(date:string,r:any){
    if(!isAdmin)return;
    const key=String(r.id||r.temp_id);setSaving(key);setMsg('');
    const start=r.start_time??timeOf(r.starts_at);
-   const payload:any={
-     player_id:null,schedule_date:date,event_type:r.event_type||'TR',
-     title:r.event_type==='Game'?(r.opponent?'Game vs '+r.opponent:'Game'):(r.event_type||'TR'),
-     category:r.event_type||'TR',opponent:r.opponent||null,
-     starts_at:toTs(date,start),ends_at:null,location:r.location||null,
-     staff_names:r.staff_names||[],staff_name:(r.staff_names||[]).join(' / ')||null,
-     notes:r.notes||null,details:r.notes||null,created_by:profile?.id||null
-   };
+   const payload:any={player_id:null,schedule_date:date,entry_label:r.entry_label||null,event_type:r.event_type||'TR',
+     title:(r.event_type==='Game'||r.event_type==='TRM')?(r.opponent?(r.event_type+' vs '+r.opponent):r.event_type):(r.event_type||'TR'),
+     category:r.event_type||'TR',opponent:(r.event_type==='Game'||r.event_type==='TRM')?(r.opponent||null):null,
+     starts_at:toTs(date,start),ends_at:null,location:r.location||null,staff_names:r.staff_names||[],staff_name:(r.staff_names||[]).join(' / ')||null,
+     notes:r.notes||null,details:r.notes||null,created_by:profile?.id||null};
    const res=r.id?await supabase.from('player_schedule').update(payload).eq('id',r.id):await supabase.from('player_schedule').insert(payload);
    setMsg(res.error?res.error.message:'スケジュールを保存しました。');setSaving('');if(!res.error)load();
  }
@@ -416,11 +399,13 @@ function Team({isAdmin,profile}:{isAdmin:boolean;profile:Profile|null}){
  return <section className="homePage"><Title t="HOME" s="メッセージ・本日のTR参加状況・今週の予定をまとめて確認"/>
  <div className="homeGrid">
    <div className="panel homeMessages"><h3>新着メッセージ</h3>{messages.length?messages.map(m=><div className={'homeMessage '+(!m.read_at?'unreadMessage':'')} key={m.id}><b>{peopleMap.get(m.sender_id)||'選手・スタッフ'}</b><span>{new Date(m.created_at).toLocaleString('ja-JP')}</span><p>{m.body}</p></div>):<div className="empty">新着メッセージはありません。</div>}</div>
-   <div className="panel attendanceCard"><h3>TR参加人数</h3><div className="attendanceCount"><b>{participants}</b><span> / {players.length}名</span></div><details className="absenceDetails"><summary>TR不参加者 {nonParticipants.length}名</summary>{nonParticipants.length?nonParticipants.map(p=><div className="absenceRow" key={p.player_id}><div className="personCell"><Avatar path={p.avatar_path} name={p.full_name} size={34}/><b>{p.full_name}</b></div><div>{p.school_grade||'-'}年 / {p.position||'-'}</div><div>{p.injury_name||'傷害情報なし'}</div><div>{p.pain_score!=null?'Pain '+p.pain_score+'/10':'Pain -'}</div></div>):<div className="empty">TR不参加者はいません。</div>}</details></div>
+   <div className="panel attendanceCard"><h3>TR参加人数</h3><div className="attendanceCount"><b>{participants}</b><span> / {players.length}名</span></div>
+   <details className="absenceDetails"><summary>TR不参加者 {nonParticipants.length}名</summary>
+   {nonParticipants.length?<><div className="absenceBreakdown">{Object.entries(reasonCounts).map(([k,v])=><span key={k}>{k} <b>{String(v)}名</b></span>)}</div>{nonParticipants.map(p=><div className="absenceRow" key={p.player_id}><div className="personCell"><Avatar path={p.avatar_path} name={p.full_name} size={34}/><b>{p.full_name}</b></div><div>{p.school_grade||'-'}年 / {p.position||'-'}</div><div><span className="pill warn">{reasonLabel(p)}</span>{p.injury_name&&<small>{p.injury_name}</small>}</div><div>{p.pain_score!=null?'Pain '+p.pain_score+'/10':'Pain -'}</div></div>)}</>:<div className="empty">TR不参加者はいません。</div>}</details></div>
  </div>
 
  <div className="panel weeklySchedule"><div className="scheduleHeader"><div><h3>今週のスケジュール</h3><p>{weekStart} 〜 {weekEnd}</p></div>{msg&&<span className="notice inlineNotice">{msg}</span>}</div>
- <div className="scheduleDays">{weekDates.map(d=>{const date=iso(d);return <div className="scheduleDay" key={date}><div className="scheduleDayHead"><b>{d.toLocaleDateString('ja-JP',{month:'numeric',day:'numeric',weekday:'short'})}</b>{isAdmin&&<button className="secondary" onClick={()=>addEntry(date)}>＋ 追加</button>}</div>{entriesFor(date).map((r:any,idx:number)=>{const key=r.id||r.temp_id;const start=r.start_time??timeOf(r.starts_at);return <div className="scheduleEntry" key={key}><div className="scheduleEntryNo">#{idx+1}</div><select disabled={!isAdmin} value={r.event_type||'TR'} onChange={e=>patchEntry(date,key,'event_type',e.target.value)}><option value="TR">TR</option><option value="Game">Game</option><option value="OFF">OFF</option><option value="Other">Other</option></select><input disabled={!isAdmin||r.event_type!=='Game'} value={r.opponent||''} placeholder="対戦相手" onChange={e=>patchEntry(date,key,'opponent',e.target.value)}/><input disabled={!isAdmin} type="time" value={start} onChange={e=>patchEntry(date,key,'start_time',e.target.value)}/><input disabled={!isAdmin} value={r.location||''} placeholder="場所" onChange={e=>patchEntry(date,key,'location',e.target.value)}/><div className="staffMulti"><div className="staffChips">{(r.staff_names||[]).map((n:string)=><span className="staffChip" key={n}>{n}{isAdmin&&<button type="button" onClick={()=>removeStaff(date,r,n)}>×</button>}</span>)}</div>{isAdmin&&<div className="staffAdd"><select defaultValue="" onChange={e=>{addStaff(date,r,e.target.value);e.currentTarget.value=''}}><option value="">担当者</option>{staff.map(s=><option key={s.id} value={s.full_name}>{s.full_name}</option>)}</select><button type="button" className="secondary" onClick={e=>{const sel=(e.currentTarget.previousElementSibling as HTMLSelectElement);addStaff(date,r,sel.value);sel.value=''}}>追加</button></div>}</div><textarea disabled={!isAdmin} rows={2} value={r.notes||''} placeholder="自由記述" onChange={e=>patchEntry(date,key,'notes',e.target.value)}/>{isAdmin&&<div className="scheduleActions"><button onClick={()=>saveEntry(date,r)} disabled={saving===String(key)}>{saving===String(key)?'保存中':'保存'}</button><button className="dangerBtn" onClick={()=>removeEntry(date,r)}>削除</button></div>}</div>})}</div>})}</div>
+ <div className="scheduleDays">{weekDates.map(d=>{const date=iso(d);return <div className="scheduleDay" key={date}><div className="scheduleDayHead"><b>{d.toLocaleDateString('ja-JP',{month:'numeric',day:'numeric',weekday:'short'})}</b>{isAdmin&&<button className="secondary" onClick={()=>addEntry(date)}>＋ 追加</button>}</div>{entriesFor(date).map((r:any,idx:number)=>{const key=r.id||r.temp_id;const start=r.start_time??timeOf(r.starts_at);const opponentEnabled=r.event_type==='Game'||r.event_type==='TRM';return <div className="scheduleEntry" key={key}><input className="entryLabelInput" disabled={!isAdmin} value={r.entry_label||('カテゴリー '+(idx+1))} onChange={e=>patchEntry(date,key,'entry_label',e.target.value)}/><select disabled={!isAdmin} value={r.event_type||'TR'} onChange={e=>patchEntry(date,key,'event_type',e.target.value)}><option value="TR">TR</option><option value="Game">Game</option><option value="TRM">TRM</option><option value="OFF">OFF</option><option value="Other">Other</option></select>{opponentEnabled?<input disabled={!isAdmin} value={r.opponent||''} placeholder="対戦相手" onChange={e=>patchEntry(date,key,'opponent',e.target.value)}/>:<div className="opponentSpacer"></div>}<input disabled={!isAdmin} type="time" value={start} onChange={e=>patchEntry(date,key,'start_time',e.target.value)}/><input disabled={!isAdmin} value={r.location||''} placeholder="場所" onChange={e=>patchEntry(date,key,'location',e.target.value)}/><div className="staffMulti"><div className="staffChips">{(r.staff_names||[]).map((n:string)=><span className="staffChip" key={n}>{n}{isAdmin&&<button type="button" onClick={()=>removeStaff(date,r,n)}>×</button>}</span>)}</div>{isAdmin&&<div className="staffAdd"><select defaultValue="" onChange={e=>{addStaff(date,r,e.target.value);e.currentTarget.value=''}}><option value="">担当者</option>{staff.map(s=><option key={s.id} value={s.full_name}>{s.full_name}</option>)}</select><button type="button" className="secondary" onClick={e=>{const sel=(e.currentTarget.previousElementSibling as HTMLSelectElement);addStaff(date,r,sel.value);sel.value=''}}>追加</button></div>}</div><textarea disabled={!isAdmin} rows={2} value={r.notes||''} placeholder="自由記述" onChange={e=>patchEntry(date,key,'notes',e.target.value)}/>{isAdmin&&<div className="scheduleActions"><button onClick={()=>saveEntry(date,r)} disabled={saving===String(key)}>{saving===String(key)?'保存中':'保存'}</button><button className="dangerBtn" onClick={()=>removeEntry(date,r)}>削除</button></div>}</div>})}</div>})}</div>
  </div>
  </section>;
 }
