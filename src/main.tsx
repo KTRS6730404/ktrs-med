@@ -8,7 +8,7 @@ type Role='player'|'staff';
 type Approval='pending'|'approved'|'rejected';
 type Profile={id:string;role:Role;full_name:string;school_grade:number|null;position:string|null;jersey_number:number|null;height_cm:number|null;weight_kg:number|null;dominant_foot:string|null;origin_team:string|null;avatar_path:string|null;player_registration_number:string|null;staff_title:string|null;team_id:number|null};
 type ApprovalRow={user_id:string;status:Approval;rejection_reason:string|null};
-type Screen='home'|'team_players'|'team_staff'|'team_teams'|'schedule_training'|'schedule_games'|'schedule_events'|'schedule_medical'|'performance_physical'|'performance_gps'|'performance_gps_game'|'performance_gps_tr'|'performance_body'|'performance_benchmark'|'medical_injury'|'medical_evaluation'|'medical_treatment'|'medical_rehab'|'medical_rtp'|'development_evaluation'|'development_objectives'|'development_reports'|'development_video'|'communication_chat'|'communication_announcement'|'communication_notifications'|'management_accounts'|'management_permissions'|'management_data'|'management_settings'|'set_schedule_categories'|'set_schedule_competitions';
+type Screen='home'|'team_players'|'team_staff'|'team_teams'|'schedule_training'|'schedule_games'|'schedule_events'|'schedule_medical'|'performance_physical'|'performance_gps'|'performance_gps_game'|'performance_gps_tr'|'performance_body'|'performance_benchmark'|'medical_injury'|'medical_evaluation'|'medical_treatment'|'medical_rehab'|'medical_rtp'|'development_evaluation'|'development_objectives'|'development_reports'|'development_video'|'communication_chat'|'communication_announcement'|'communication_notifications'|'management_accounts'|'management_permissions'|'management_data'|'management_settings'|'set_categories';
 type PlayerScreen='mypage'|'schedule'|'report'|'history'|'medical'|'rehab'|'rtp'|'physical'|'gps'|'messages'|'chat'|'settings';
 
 const statusLabel:Record<string,string>={needs_attention:'要対応',rehab:'リハビリ中',observation:'経過観察',available:'問題なし'};
@@ -104,8 +104,8 @@ function App(){
    {screen==='management_permissions'&&<ModulePlaceholder title="MANAGEMENT / Permissions" text="ロール・閲覧範囲・編集権限を管理する画面です。"/>}
    {screen==='management_data'&&<FmsHub initialTab="report" compact pageTitle="MANAGEMENT / Data"/>}
    {screen==='management_settings'&&<ModulePlaceholder title="MANAGEMENT / Settings" text="KTRS FMS全体の設定を管理する画面です。"/>}
-   {screen==='set_schedule_categories'&&isAdmin&&<ScheduleCategorySettings profile={profile}/>}
- </Shell>;
+   {screen==='set_categories'&&isAdmin&&<CategorySettings profile={profile}/>}
+</Shell>;
 }
 
 function Auth(){
@@ -151,7 +151,7 @@ function Shell({profile,isAdmin,screen,setScreen,alerts,onLogout,children}:any){
    {key:'DEVELOPMENT',label:'DEVELOPMENT',items:[['development_evaluation','Player Evaluation'],['development_objectives','Objectives'],['development_reports','Reports'],['development_video','Video']]},
    {key:'COMMUNICATION',label:'COMMUNICATION',items:[['communication_chat','Chat'],['communication_announcement','Announcement'],['communication_notifications','Notifications']]},
    {key:'MANAGEMENT',label:'MANAGEMENT',items:[['management_accounts','Accounts'],['management_permissions','Permissions'],['management_data','Data'],['management_settings','Settings']]},
-   {key:'SET',label:'SET',items:[['set_schedule_categories','Schedule Categories'],['set_schedule_competitions','Competitions']]}
+   {key:'SET',label:'SET',items:[['set_categories','Categorys']]}
  ];
  const alertFor=(s:Screen)=>s==='team_players'?Number(alerts?.players||0):s==='medical_injury'?Number(alerts?.case||0):s==='development_reports'?Number(alerts?.reports||0):s==='communication_chat'?Number(alerts?.chat||0):s==='management_accounts'?Number(alerts?.admin||0):0;
  return <div className="appFrame">
@@ -447,82 +447,98 @@ function DirectoryView({mode,isAdmin}:{mode:'staff'|'teams';isAdmin:boolean}){
 
 
 
-function ScheduleCategorySettings({profile}:{profile:Profile|null}){
- const [rows,setRows]=useState<any[]>([]),[name,setName]=useState(''),[msg,setMsg]=useState('');
+function CategorySettings({profile}:{profile:Profile|null}){
+ const [scheduleRows,setScheduleRows]=useState<any[]>([]);
+ const [competitionRows,setCompetitionRows]=useState<any[]>([]);
+ const [scheduleName,setScheduleName]=useState('');
+ const [competitionName,setCompetitionName]=useState('');
+ const [edit,setEdit]=useState<{kind:'schedule'|'competition';row:any;name:string}|null>(null);
+ const [msg,setMsg]=useState('');
+
  useEffect(()=>{load()},[]);
- async function load(){const {data,error}=await supabase.from('schedule_entry_categories').select('*').order('sort_order').order('name');if(error)setMsg(error.message);setRows(data||[])}
- async function add(){
-   const n=name.trim();if(!n)return;
-   const existing=rows.find((x:any)=>x.name===n);
-   if(existing){
-     if(!existing.is_active){const {error}=await supabase.from('schedule_entry_categories').update({is_active:true,updated_at:new Date().toISOString()}).eq('id',existing.id);setMsg(error?error.message:'カテゴリーを再表示しました。');if(!error){setName('');load()}}
-     else setMsg('同じカテゴリーがすでにあります。');
-     return;
+ async function load(){
+   const [{data:s,error:se},{data:c,error:ce}]=await Promise.all([
+     supabase.from('schedule_entry_categories').select('*').order('sort_order').order('name'),
+     supabase.from('schedule_competitions').select('*').order('sort_order').order('name')
+   ]);
+   if(se||ce)setMsg((se||ce)?.message||'読み込みに失敗しました。');
+   setScheduleRows(s||[]);setCompetitionRows(c||[]);
+ }
+
+ async function add(kind:'schedule'|'competition'){
+   const isSchedule=kind==='schedule';
+   const raw=isSchedule?scheduleName:competitionName;
+   const name=raw.trim();if(!name)return;
+   const table=isSchedule?'schedule_entry_categories':'schedule_competitions';
+   const rows=isSchedule?scheduleRows:competitionRows;
+   const existing=rows.find((x:any)=>x.name===name);
+   if(existing){setMsg('同じ名称がすでに登録されています。');return}
+   const {error}=await supabase.from(table).insert({name,sort_order:rows.length+1,created_by:profile?.id||null});
+   setMsg(error?error.message:'追加しました。');
+   if(!error){isSchedule?setScheduleName(''):setCompetitionName('');await load()}
+ }
+
+ async function saveEdit(){
+   if(!edit)return;
+   const name=edit.name.trim();if(!name)return;
+   const isSchedule=edit.kind==='schedule';
+   const table=isSchedule?'schedule_entry_categories':'schedule_competitions';
+   const scheduleColumn=isSchedule?'entry_label':'competition_name';
+   const oldName=edit.row.name;
+   const {error}=await supabase.from(table).update({name,updated_at:new Date().toISOString()}).eq('id',edit.row.id);
+   if(error){setMsg(error.message);return}
+   if(name!==oldName){
+     const history=await supabase.from('player_schedule').update({[scheduleColumn]:name}).eq(scheduleColumn,oldName);
+     if(history.error){
+       await supabase.from(table).update({name:oldName,updated_at:new Date().toISOString()}).eq('id',edit.row.id);
+       setMsg(history.error.message);return;
+     }
    }
-   const {error}=await supabase.from('schedule_entry_categories').insert({name:n,sort_order:rows.length+1,created_by:profile?.id||null});
-   setMsg(error?error.message:'カテゴリーを追加しました。');if(!error){setName('');load()}
+   setMsg('名称を変更しました。');setEdit(null);await load();
  }
- async function remove(cat:any){
-   const {count,error:countError}=await supabase.from('player_schedule').select('id',{count:'exact',head:true}).eq('entry_label',cat.name);
-   if(countError){setMsg(countError.message);return}
-   if((count||0)>0){
-     const {error}=await supabase.from('schedule_entry_categories').update({is_active:false,updated_at:new Date().toISOString()}).eq('id',cat.id);
-     setMsg(error?error.message:'使用済みカテゴリーのため、履歴を残して非表示にしました。');
-   }else{
-     const {error}=await supabase.from('schedule_entry_categories').delete().eq('id',cat.id);
-     setMsg(error?error.message:'未使用カテゴリーを削除しました。');
-   }
-   load();
+
+ async function toggleHidden(){
+   if(!edit)return;
+   const table=edit.kind==='schedule'?'schedule_entry_categories':'schedule_competitions';
+   const next=!edit.row.is_active;
+   const {error}=await supabase.from(table).update({is_active:next,updated_at:new Date().toISOString()}).eq('id',edit.row.id);
+   setMsg(error?error.message:(next?'再表示しました。':'非表示にしました。'));
+   if(!error){setEdit(null);await load()}
  }
- async function restore(cat:any){
-   const {error}=await supabase.from('schedule_entry_categories').update({is_active:true,updated_at:new Date().toISOString()}).eq('id',cat.id);
-   setMsg(error?error.message:'カテゴリーを再表示しました。');if(!error)load();
+
+ async function deleteItem(){
+   if(!edit)return;
+   if(!window.confirm('「'+edit.row.name+'」を一覧から削除しますか？\n過去のスケジュールに保存済みの名称は履歴として残ります。'))return;
+   const table=edit.kind==='schedule'?'schedule_entry_categories':'schedule_competitions';
+   const {error}=await supabase.from(table).delete().eq('id',edit.row.id);
+   setMsg(error?error.message:'削除しました。');
+   if(!error){setEdit(null);await load()}
  }
- return <section><Title t="SET / Schedule Categories"/>
+
+ function list(kind:'schedule'|'competition',rows:any[],value:string,setValue:(v:string)=>void){
+   const title=kind==='schedule'?'Schedule Category一覧':'Competition一覧';
+   const placeholder=kind==='schedule'?'新しいSchedule Category':'新しいCompetition';
+   return <details className="panel categorySetGroup">
+     <summary className="categorySetSummary"><div><b>{title}</b><span>{rows.length}件</span></div><div className="categoryNamePreview">{rows.length?rows.map((r:any)=>r.name).join(' / '):'未登録'}</div></summary>
+     <div className="categorySetBody">
+       <div className="categoryAddRow"><input value={value} placeholder={placeholder} onChange={e=>setValue(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();add(kind)}}}/><button onClick={()=>add(kind)}>＋ 追加</button></div>
+       <div className="categoryManageList">{rows.map((row:any)=><div className="categoryManageRow" key={row.id}><div><b className={!row.is_active?'archivedCategory':''}>{row.name}</b>{!row.is_active&&<small>非表示</small>}</div><button className="secondary" onClick={()=>setEdit({kind,row,name:row.name})}>編集</button></div>)}</div>
+     </div>
+   </details>
+ }
+
+ return <section><Title t="SET / Categorys" s="Schedule CategoryとCompetitionをまとめて管理"/>
    {msg&&<div className="notice">{msg}</div>}
-   <div className="panel form"><h3>カテゴリー追加</h3><div className="categoryAddRow"><input value={name} placeholder="カテゴリー名" onChange={e=>setName(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();add()}}}/><button onClick={add}>＋ 追加</button></div></div>
-   <div className="panel"><h3>カテゴリー一覧</h3><div className="categoryManageList">{rows.map((cat:any)=><div className="categoryManageRow" key={cat.id}><div><b className={!cat.is_active?'archivedCategory':''}>{cat.name}</b><small>{cat.is_active?'使用中':'非表示'}</small></div>{cat.is_active?<button className="dangerBtn" onClick={()=>remove(cat)}>削除</button>:<button className="secondary" onClick={()=>restore(cat)}>再表示</button>}</div>)}</div></div>
+   {list('schedule',scheduleRows,scheduleName,setScheduleName)}
+   {list('competition',competitionRows,competitionName,setCompetitionName)}
+   {edit&&<div className="confirmOverlay" onClick={()=>setEdit(null)}><div className="confirmCard categoryEditCard" onClick={e=>e.stopPropagation()}>
+     <h3>{edit.kind==='schedule'?'Schedule Category':'Competition'} 編集</h3>
+     <label>名称<input value={edit.name} onChange={e=>setEdit({...edit,name:e.target.value})}/></label>
+     <div className="actions"><button onClick={saveEdit}>変更を保存</button><button className="secondary" onClick={toggleHidden}>{edit.row.is_active?'非表示':'再表示'}</button><button className="dangerBtn" onClick={deleteItem}>削除</button><button className="secondary" onClick={()=>setEdit(null)}>キャンセル</button></div>
+   </div></div>}
  </section>;
 }
 
-
-function ScheduleCompetitionSettings({profile}:{profile:Profile|null}){
- const [rows,setRows]=useState<any[]>([]),[name,setName]=useState(''),[msg,setMsg]=useState('');
- useEffect(()=>{load()},[]);
- async function load(){const {data,error}=await supabase.from('schedule_competitions').select('*').order('sort_order').order('name');if(error)setMsg(error.message);setRows(data||[])}
- async function add(){
-   const n=name.trim();if(!n)return;
-   const existing=rows.find((x:any)=>x.name===n);
-   if(existing){
-     if(!existing.is_active){const {error}=await supabase.from('schedule_competitions').update({is_active:true,updated_at:new Date().toISOString()}).eq('id',existing.id);setMsg(error?error.message:'大会名を再表示しました。');if(!error){setName('');load()}}
-     else setMsg('同じ大会名がすでにあります。');
-     return;
-   }
-   const {error}=await supabase.from('schedule_competitions').insert({name:n,sort_order:rows.length+1,created_by:profile?.id||null});
-   setMsg(error?error.message:'大会名を追加しました。');if(!error){setName('');load()}
- }
- async function remove(row:any){
-   const {count,error:countError}=await supabase.from('player_schedule').select('id',{count:'exact',head:true}).eq('competition_name',row.name);
-   if(countError){setMsg(countError.message);return}
-   if((count||0)>0){
-     const {error}=await supabase.from('schedule_competitions').update({is_active:false,updated_at:new Date().toISOString()}).eq('id',row.id);
-     setMsg(error?error.message:'使用済み大会名のため、履歴を残して非表示にしました。');
-   }else{
-     const {error}=await supabase.from('schedule_competitions').delete().eq('id',row.id);
-     setMsg(error?error.message:'未使用の大会名を削除しました。');
-   }
-   load();
- }
- async function restore(row:any){
-   const {error}=await supabase.from('schedule_competitions').update({is_active:true,updated_at:new Date().toISOString()}).eq('id',row.id);
-   setMsg(error?error.message:'大会名を再表示しました。');if(!error)load();
- }
- return <section><Title t="SET / Competitions"/>
-   {msg&&<div className="notice">{msg}</div>}
-   <div className="panel form"><h3>大会名追加</h3><div className="categoryAddRow"><input value={name} placeholder="大会名" onChange={e=>setName(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();add()}}}/><button onClick={add}>＋ 追加</button></div></div>
-   <div className="panel"><h3>大会名一覧</h3><div className="categoryManageList">{rows.map((row:any)=><div className="categoryManageRow" key={row.id}><div><b className={!row.is_active?'archivedCategory':''}>{row.name}</b><small>{row.is_active?'使用中':'非表示'}</small></div>{row.is_active?<button className="dangerBtn" onClick={()=>remove(row)}>削除</button>:<button className="secondary" onClick={()=>restore(row)}>再表示</button>}</div>)}</div></div>
- </section>;
-}
 
 function Team({isAdmin,profile}:{isAdmin:boolean;profile:Profile|null}){
  const [players,setPlayers]=useState<any[]>([]);
