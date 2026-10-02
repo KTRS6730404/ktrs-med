@@ -105,3 +105,31 @@
  .navGroup{border-top:1px solid #ffffff14}
  .appContent>main{padding:16px 12px}
 }
+
+.homePage{width:100%;max-width:none;padding:0 8px}
+.homePage .title{margin-left:0;margin-right:0}
+.homeGrid{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(320px,.75fr);gap:14px;margin-bottom:14px}
+.homeMessages,.attendanceCard,.weeklySchedule{width:100%}
+.homeMessage{padding:10px 0;border-bottom:1px solid #e8eef5}
+.homeMessage:last-child{border-bottom:none}
+.homeMessage b{display:inline-block;margin-right:10px}
+.homeMessage span{font-size:12px;color:#7a8a9a}
+.homeMessage p{margin:5px 0 0;white-space:pre-wrap}
+.unreadMessage{background:#fff5f5;border-left:4px solid #d92d20;padding-left:10px}
+.attendanceCount{display:flex;align-items:flex-end;gap:4px;margin:10px 0 14px}
+.attendanceCount b{font-size:40px;line-height:1}
+.attendanceCount span{font-size:16px;color:#6b7b8d}
+.absenceDetails{border:1px solid #dfe7ef;border-radius:10px;overflow:hidden}
+.absenceDetails summary{cursor:pointer;padding:11px 12px;background:#f7f9fc;font-weight:700}
+.absenceRow{display:grid;grid-template-columns:minmax(160px,1.2fr) .7fr 1fr .6fr;gap:10px;align-items:center;padding:10px 12px;border-top:1px solid #edf1f5}
+.scheduleHeader{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}
+.scheduleHeader h3,.scheduleHeader p{margin:0}
+.inlineNotice{margin:0}
+.weekTableWrap{overflow-x:auto}
+.weekTable{min-width:1180px;width:100%}
+.weekTable th,.weekTable td{vertical-align:top}
+.weekTable input,.weekTable select,.weekTable textarea{width:100%;min-width:0;padding:8px;border:1px solid #d7e0eb;border-radius:8px;background:white}
+.timePair{display:grid;grid-template-columns:1fr auto 1fr;gap:5px;align-items:center;min-width:190px}
+main{max-width:none}
+@media(max-width:1000px){.homeGrid{grid-template-columns:1fr}.absenceRow{grid-template-columns:1fr 1fr}.homePage{padding:0 6px}}
+@media(max-width:600px){.homePage{padding:0 3px}.absenceRow{grid-template-columns:1fr}.homeGrid{gap:10px}}
