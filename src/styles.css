@@ -389,3 +389,28 @@ main{max-width:none}
 .groupMemberChecklist{max-height:360px}
 .chatFilters{display:grid;grid-template-columns:minmax(160px,1fr) minmax(150px,.9fr) minmax(180px,1.1fr) 150px auto;gap:8px;align-items:center;margin-bottom:12px}
 @media(max-width:900px){.chatFilters{grid-template-columns:1fr 1fr}.chatFilters button{grid-column:span 2}}
+
+.conditionScale{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+.conditionScale button{min-width:34px;height:34px;padding:0;background:#eef3f8;color:#506274;border:1px solid #dde6ee}
+.conditionScale button.active{background:#d9eaff;color:#174f80;border-color:#bdd7f0}
+.conditionHistory{display:grid;gap:8px}
+.conditionHistory>div{display:flex;justify-content:space-between;gap:12px;padding:9px 0;border-bottom:1px solid #edf1f5}
+.autoAlertPanel{margin-bottom:14px;padding:0;overflow:hidden}
+.autoAlertRow{display:grid;grid-template-columns:minmax(120px,.7fr) minmax(220px,1.2fr) minmax(180px,1fr);gap:12px;padding:11px 16px;border-top:1px solid #edf1f5;align-items:center}
+.autoAlertRow span{color:#9b3b3b;font-weight:700}.autoAlertRow small{color:#748698}
+.playerDashboardModal{width:min(94vw,1100px);max-width:1100px;max-height:90vh;overflow:auto}
+.dashboardHead{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.dashboardHead h2{margin:0}
+.dashboardGrid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:14px 0}
+.reviewTimeline{display:grid;gap:10px}
+.reviewTimeline>div{display:grid;grid-template-columns:44px 1fr;gap:10px;align-items:start;padding:9px 0;border-bottom:1px solid #edf1f5}
+.reviewTimeline p{margin:3px 0;color:#64778a}
+.weeklyMedical{padding:0;overflow:hidden;margin-bottom:14px}
+.weeklyMedical details{border-top:1px solid #edf1f5}
+.weeklyMedical summary{display:flex;justify-content:space-between;gap:12px;padding:12px 16px;cursor:pointer}
+.reportStats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;padding:0 16px 16px}
+.reportStats>div{background:#f5f8fb;border-radius:10px;padding:12px;display:grid;gap:4px}
+.reportStats span{font-size:11px;color:#748698}.reportStats b{font-size:22px}
+.clipRow{display:flex;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1px solid #edf1f5}
+.clipRow>div{display:grid;gap:2px}.clipRow span,.clipRow small{font-size:12px;color:#748698}
+@media(max-width:760px){.dashboardGrid{grid-template-columns:1fr}.reportStats{grid-template-columns:1fr 1fr}.autoAlertRow{grid-template-columns:1fr}}
