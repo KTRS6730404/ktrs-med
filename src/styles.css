@@ -201,3 +201,7 @@ main{max-width:none}
 .gpsMatchSummary em{font-style:normal;font-size:12px;color:#526173;white-space:nowrap}
 .gpsMatchCard[open] .gpsMatchSummary{background:#f7fafc;border-bottom:1px solid #e4eaf0}
 @media(max-width:800px){.gpsMatchSummary{grid-template-columns:1fr 1fr}.gpsMatchSummary em{grid-column:span 2}}
+
+.gpsMetricStack{display:flex;flex-direction:column;gap:2px;align-items:flex-start}
+.gpsMetricStack b{font-size:13px}
+.gpsMetricStack small{font-size:11px;color:#718096}
