@@ -66,7 +66,7 @@ function Gps(){
  const [players,setPlayers]=useState<any[]>([]),[sessions,setSessions]=useState<any[]>([]),[metrics,setMetrics]=useState<any[]>([]),[knows,setKnows]=useState<any[]>([]),[msg,setMsg]=useState('');
  const [sort,setSort]=useState<{key:string;dir:'asc'|'desc'}>({key:'athlete_name',dir:'asc'});
  const [showImport,setShowImport]=useState(false),[dragging,setDragging]=useState(false),[importFile,setImportFile]=useState<File|null>(null),[importing,setImporting]=useState(false);
- const [importMeta,setImportMeta]=useState<any>({session_date:new Date().toISOString().slice(0,10),kickoff_time:'',venue:'',opponent:''});
+ const [importMeta,setImportMeta]=useState<any>({activity_type:'Game',session_date:new Date().toISOString().slice(0,10),kickoff_time:'',venue:'',opponent:''});
  const [sf,setSf]=useState<any>({session_date:new Date().toISOString().slice(0,10),session_name:'',session_type:'training',duration_minutes:''}),[mf,setMf]=useState<any>({gps_session_id:'',player_id:'',total_distance_m:'',meters_per_min:'',hsr_distance_m:'',sprint_distance_m:'',sprint_count:'',max_speed_kmh:'',acceleration_count:'',deceleration_count:''});
  async function load(){
    const [{data:p},{data:s},{data:m},{data:k}]=await Promise.all([
@@ -119,6 +119,7 @@ function Gps(){
      const {data:{user}}=await supabase.auth.getUser();
      if(!user)throw new Error('ログイン情報を確認できません。');
      const payload=rows.slice(1).map(r=>({
+       activity_type:importMeta.activity_type||'Game',
        session_date:importMeta.session_date,
        session_name:'Knows CSV',
        kickoff_time:importMeta.kickoff_time||null,
@@ -146,10 +147,12 @@ function Gps(){
  function acceptFile(file?:File|null){if(!file)return;if(!file.name.toLowerCase().endsWith('.csv')){setMsg('CSVファイルを選択してください。');return}setImportFile(file);setShowImport(true)}
 
  const matchGroups=knows.reduce((acc:any,row:any)=>{
-   const key=[row.session_date,row.kickoff_time||'',row.venue||'',row.opponent||'',row.session_name||''].join('|');
+   const key=[row.activity_type||'Game',row.session_date,row.kickoff_time||'',row.venue||'',row.opponent||'',row.session_name||''].join('|');
    (acc[key] ||= []).push(row); return acc;
  },{});
  const matches=Object.entries(matchGroups).map(([key,rowsAny])=>{const rows=rowsAny as any[];return {key,rows,head:rows[0]}}).sort((a:any,b:any)=>String(b.head.session_date+' '+(b.head.kickoff_time||'')).localeCompare(String(a.head.session_date+' '+(a.head.kickoff_time||''))));
+ const gameMatches=matches.filter((g:any)=>(g.head.activity_type||'Game')==='Game');
+ const trMatches=matches.filter((g:any)=>g.head.activity_type==='TR');
  const weekly=matches.map((g:any)=>{const rows=g.rows;const per10=(k:string)=>rows.reduce((a:any,r:any)=>a+Number(r[k]||0),0)/10;return {key:g.key,label:g.head.session_date.slice(5).replace('-','/')+' '+(g.head.opponent||g.head.session_name||''),total_distance_m:per10('total_distance_m'),sprint_distance_m:per10('sprint_distance_m'),si:per10('si'),hi:per10('hi'),sprint_count:per10('sprint_count'),acceleration_count:per10('acceleration_count'),deceleration_count:per10('deceleration_count')}}).sort((a:any,b:any)=>String(a.key).localeCompare(String(b.key))).slice(-7);
  const toggleSort=(key:string)=>setSort(s=>({key,dir:s.key===key&&s.dir==='asc'?'desc':'asc'}));
  const arrow=(key:string)=>sort.key===key?(sort.dir==='asc'?' ▲':' ▼'):'';
@@ -159,7 +162,7 @@ function Gps(){
  const timeText=(v:any)=>v?String(v).slice(0,5):'-';
  return <div>
    <div className="gpsToolbar"><button onClick={()=>setShowImport(v=>!v)}>＋ データ追加</button></div>
-   {showImport&&<div className="panel gpsImportPanel"><div className="grid2"><input type="date" value={importMeta.session_date} onChange={e=>setImportMeta({...importMeta,session_date:e.target.value})}/><input type="time" value={importMeta.kickoff_time} onChange={e=>setImportMeta({...importMeta,kickoff_time:e.target.value})}/><input placeholder="試合会場" value={importMeta.venue} onChange={e=>setImportMeta({...importMeta,venue:e.target.value})}/><input placeholder="対戦相手" value={importMeta.opponent} onChange={e=>setImportMeta({...importMeta,opponent:e.target.value})}/></div>
+   {showImport&&<div className="panel gpsImportPanel"><div className="grid2"><select value={importMeta.activity_type} onChange={e=>setImportMeta({...importMeta,activity_type:e.target.value})}><option value="Game">Game</option><option value="TR">TR</option></select><input type="date" value={importMeta.session_date} onChange={e=>setImportMeta({...importMeta,session_date:e.target.value})}/><input type="time" value={importMeta.kickoff_time} onChange={e=>setImportMeta({...importMeta,kickoff_time:e.target.value})}/><input placeholder="試合会場" value={importMeta.venue} onChange={e=>setImportMeta({...importMeta,venue:e.target.value})}/><input placeholder="対戦相手" value={importMeta.opponent} onChange={e=>setImportMeta({...importMeta,opponent:e.target.value})}/></div>
    <label className={'gpsDropZone '+(dragging?'dragging':'')} onDragOver={e=>{e.preventDefault();setDragging(true)}} onDragLeave={()=>setDragging(false)} onDrop={e=>{e.preventDefault();setDragging(false);acceptFile(e.dataTransfer.files?.[0])}}>
      <input type="file" accept=".csv,text/csv" onChange={e=>acceptFile(e.target.files?.[0])}/>
      <b>Knows CSVをここにドラッグ＆ドロップ</b><span>またはクリックしてCSVを選択</span>{importFile&&<strong>{importFile.name}</strong>}
@@ -170,20 +173,23 @@ function Gps(){
      <MiniLineChart title="Intensity" subtitle="10人換算｜SI・HI" rows={weekly} series={[{key:'si',label:'SI'},{key:'hi',label:'HI'}]}/>
      <MiniLineChart title="Actions" subtitle="10人換算｜スプリント・加速・減速" rows={weekly} series={[{key:'sprint_count',label:'スプリント',unit:'回'},{key:'acceleration_count',label:'加速',unit:'回'},{key:'deceleration_count',label:'減速',unit:'回'}]}/>
    </div>
-   <div className="gpsMatchList">
-   {matches.length===0?<div className="panel empty">GPS取込データはありません。</div>:matches.map((g:any)=><details className="panel gpsMatchCard" key={g.key}>
-      <summary className="gpsMatchSummary"><div><span>日付</span><b>{g.head.session_date}</b></div><div><span>キックオフ時間</span><b>{timeText(g.head.kickoff_time)}</b></div><div><span>試合会場</span><b>{g.head.venue||'-'}</b></div><div><span>対戦相手</span><b>{g.head.opponent||'-'}</b></div><em>{g.rows.length}名</em></summary>
-      <div className="tableWrap"><table className="knowsTable"><thead><tr>
-      <th><button className="sortHead" onClick={()=>toggleSort('athlete_name')}>選手{arrow('athlete_name')}</button></th>
-      <th><button className="sortHead" onClick={()=>toggleSort('total_distance_m')}>総走行距離{arrow('total_distance_m')}</button></th>
-      <th><button className="sortHead" onClick={()=>toggleSort('sprint_distance_m')}>スプリント距離{arrow('sprint_distance_m')}</button></th>
-      <th><button className="sortHead" onClick={()=>toggleSort('sprint_count')}>スプリント回数{arrow('sprint_count')}</button></th>
-      <th><button className="sortHead" onClick={()=>toggleSort('si')}>SI{arrow('si')}</button></th>
-      <th><button className="sortHead" onClick={()=>toggleSort('hi')}>HI{arrow('hi')}</button></th>
-      <th><button className="sortHead" onClick={()=>toggleSort('acceleration_count')}>加速{arrow('acceleration_count')}</button></th>
-      <th><button className="sortHead" onClick={()=>toggleSort('deceleration_count')}>減速{arrow('deceleration_count')}</button></th><th>操作</th></tr></thead>
-      <tbody>{sortRows(g.rows).map((r:any)=><tr key={r.id}><td><b>{r.athlete_name}</b></td><td>{fmt(r.total_distance_m,0)}m</td><td>{fmt(r.sprint_distance_m,1)}m</td><td>{fmt(r.sprint_count)}回</td><td><div className="gpsMetricStack"><b>{fmt(r.si,2)}</b><small>{pctOfDistance(r.si,r.total_distance_m)!=null?fmt(pctOfDistance(r.si,r.total_distance_m),1)+'%':'-'}</small></div></td><td><div className="gpsMetricStack"><b>{fmt(r.hi,2)}</b><small>{pctOfDistance(r.hi,r.total_distance_m)!=null?fmt(pctOfDistance(r.hi,r.total_distance_m),1)+'%':'-'}</small></div></td><td>{fmt(r.acceleration_count)}回</td><td>{fmt(r.deceleration_count)}回</td><td><button className="dangerBtn" onClick={()=>deleteKnows(r.id,r.athlete_name)}>削除</button></td></tr>)}</tbody></table></div>
-   </details>)}
+   <div className="gpsCategoryList">
+   {(['Game','TR'] as const).map(cat=>{const list=cat==='Game'?gameMatches:trMatches;return <details className="panel gpsCategoryCard" key={cat}>
+      <summary className="gpsCategorySummary"><b>{cat}</b><span>{list.length}件</span></summary>
+      <div className="gpsMatchList">{list.length===0?<div className="empty">{cat}データはまだありません。</div>:list.map((g:any)=><details className="panel gpsMatchCard" key={g.key}>
+         <summary className="gpsMatchSummary"><div><span>日付</span><b>{g.head.session_date}</b></div><div><span>{cat==='Game'?'キックオフ時間':'開始時間'}</span><b>{timeText(g.head.kickoff_time)}</b></div><div><span>{cat==='Game'?'試合会場':'TR会場'}</span><b>{g.head.venue||'-'}</b></div><div><span>{cat==='Game'?'対戦相手':'内容'}</span><b>{cat==='Game'?(g.head.opponent||'-'):(g.head.opponent||g.head.session_name||'-')}</b></div><em>{g.rows.length}名</em></summary>
+         <div className="tableWrap"><table className="knowsTable"><thead><tr>
+         <th><button className="sortHead" onClick={()=>toggleSort('athlete_name')}>選手{arrow('athlete_name')}</button></th>
+         <th><button className="sortHead" onClick={()=>toggleSort('total_distance_m')}>総走行距離{arrow('total_distance_m')}</button></th>
+         <th><button className="sortHead" onClick={()=>toggleSort('sprint_distance_m')}>スプリント距離{arrow('sprint_distance_m')}</button></th>
+         <th><button className="sortHead" onClick={()=>toggleSort('sprint_count')}>スプリント回数{arrow('sprint_count')}</button></th>
+         <th><button className="sortHead" onClick={()=>toggleSort('si')}>SI{arrow('si')}</button></th>
+         <th><button className="sortHead" onClick={()=>toggleSort('hi')}>HI{arrow('hi')}</button></th>
+         <th><button className="sortHead" onClick={()=>toggleSort('acceleration_count')}>加速{arrow('acceleration_count')}</button></th>
+         <th><button className="sortHead" onClick={()=>toggleSort('deceleration_count')}>減速{arrow('deceleration_count')}</button></th><th>操作</th></tr></thead>
+         <tbody>{sortRows(g.rows).map((r:any)=><tr key={r.id}><td><b>{r.athlete_name}</b></td><td>{fmt(r.total_distance_m,0)}m</td><td>{fmt(r.sprint_distance_m,1)}m</td><td>{fmt(r.sprint_count)}回</td><td><div className="gpsMetricStack"><b>{fmt(r.si,2)}</b><small>{pctOfDistance(r.si,r.total_distance_m)!=null?fmt(pctOfDistance(r.si,r.total_distance_m),1)+'%':'-'}</small></div></td><td><div className="gpsMetricStack"><b>{fmt(r.hi,2)}</b><small>{pctOfDistance(r.hi,r.total_distance_m)!=null?fmt(pctOfDistance(r.hi,r.total_distance_m),1)+'%':'-'}</small></div></td><td>{fmt(r.acceleration_count)}回</td><td>{fmt(r.deceleration_count)}回</td><td><button className="dangerBtn" onClick={()=>deleteKnows(r.id,r.athlete_name)}>削除</button></td></tr>)}</tbody></table></div>
+      </details>)}</div>
+   </details>})}
    </div>
    <details className="panel gpsManual"><summary>手入力GPSデータ</summary><div className="form"><h3>GPSセッション</h3><div className="grid2"><input type="date" value={sf.session_date} onChange={e=>setSf({...sf,session_date:e.target.value})}/><input placeholder="セッション名" value={sf.session_name} onChange={e=>setSf({...sf,session_name:e.target.value})}/><select value={sf.session_type} onChange={e=>setSf({...sf,session_type:e.target.value})}><option value="training">練習</option><option value="friendly_match">練習試合</option><option value="official_match">公式戦</option><option value="rehab">リハビリ</option><option value="other">その他</option></select><input type="number" placeholder="時間 分" value={sf.duration_minutes} onChange={e=>setSf({...sf,duration_minutes:e.target.value})}/></div><button onClick={addSession}>追加</button></div><div className="form"><h3>選手GPSデータ</h3><div className="grid2"><select value={mf.gps_session_id} onChange={e=>setMf({...mf,gps_session_id:e.target.value})}><option value="">セッション選択</option>{sessions.map(s=><option key={s.id} value={s.id}>{s.session_date}｜{s.session_name}</option>)}</select><select value={mf.player_id} onChange={e=>setMf({...mf,player_id:e.target.value})}><option value="">選手選択</option>{players.map(p=><option key={p.id} value={p.id}>{p.full_name}</option>)}</select><input type="number" placeholder="Total Distance m" value={mf.total_distance_m} onChange={e=>setMf({...mf,total_distance_m:e.target.value})}/><input type="number" placeholder="m/min" value={mf.meters_per_min} onChange={e=>setMf({...mf,meters_per_min:e.target.value})}/><input type="number" placeholder="HSR m" value={mf.hsr_distance_m} onChange={e=>setMf({...mf,hsr_distance_m:e.target.value})}/><input type="number" placeholder="Sprint Distance m" value={mf.sprint_distance_m} onChange={e=>setMf({...mf,sprint_distance_m:e.target.value})}/><input type="number" placeholder="Sprint回数" value={mf.sprint_count} onChange={e=>setMf({...mf,sprint_count:e.target.value})}/><input type="number" placeholder="Max Speed km/h" value={mf.max_speed_kmh} onChange={e=>setMf({...mf,max_speed_kmh:e.target.value})}/><input type="number" placeholder="加速回数" value={mf.acceleration_count} onChange={e=>setMf({...mf,acceleration_count:e.target.value})}/><input type="number" placeholder="減速回数" value={mf.deceleration_count} onChange={e=>setMf({...mf,deceleration_count:e.target.value})}/></div><button onClick={addMetric}>保存・フィードバック</button></div><div className="tableWrap"><table><thead><tr><th>選手</th><th>Total</th><th>HSR</th><th>Sprint</th><th>Max</th><th>Feedback</th></tr></thead><tbody>{metrics.map(m=><tr key={m.id}><td>{m.profiles?.full_name||'-'}</td><td>{m.total_distance_m||'-'}m</td><td>{m.hsr_distance_m||'-'}m</td><td>{m.sprint_distance_m||'-'}m</td><td>{m.max_speed_kmh||'-'}km/h</td><td>{m.feedback||'-'}</td></tr>)}</tbody></table></div></details>
    {msg&&<div className="notice">{msg}</div>}
