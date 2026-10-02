@@ -75,3 +75,33 @@
 @media(max-width:700px){.bulkBar{align-items:stretch}.bulkBar label{width:100%;margin-right:0}.bulkBar button{flex:1}}
 
 .fmsTabs,.seg{display:flex;gap:8px;flex-wrap:wrap;margin:14px 0}.fmsTabs button,.seg button{background:#eef4fa;color:#36536f;border:1px solid #dce6ef}.fmsTabs button.active,.seg button.active{background:#1267d6;color:#fff;border-color:#1267d6}.eventGrid,.libraryGrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}.eventCard,.rehabCard{display:flex;flex-direction:column;align-items:flex-start;gap:6px;text-align:left;background:#fff;color:#173454;border:1px solid #dce6ef;border-left:4px solid #3887e8;padding:14px;border-radius:12px}.eventCard small,.rehabCard small{color:#74879b}.rehabCard strong{font-size:18px;color:#0b5fc2}.rehabHero{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:14px;border-radius:12px;background:#eef6ff}.rehabHero b{font-size:22px;color:#0b5fc2}.historyLine{display:flex;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1px solid #edf1f5}.panel textarea{width:100%;min-height:92px;padding:12px;border:1px solid #d7e0eb;border-radius:10px;background:#fff;font:inherit}.panel label{display:grid;gap:6px;font-size:12px;color:#5d7288}.panel label input,.panel label select{padding:11px;border:1px solid #d7e0eb;border-radius:10px;background:#fff}.panel .actions input{min-width:240px;padding:10px 12px;border:1px solid #d7e0eb;border-radius:10px}.libraryGrid .panel{margin:0}.eventCard:hover,.rehabCard:hover{border-color:#9ec5ef;background:#f7fbff}@media(max-width:700px){.historyLine{flex-direction:column}.rehabHero{align-items:flex-start;flex-direction:column}}
+
+/* KTRS FMS left navigation */
+.appFrame{min-height:100vh;display:grid;grid-template-columns:250px minmax(0,1fr);background:#f5f8fc}
+.mainSidebar{position:sticky;top:0;height:100vh;overflow-y:auto;background:#0f2f52;color:#fff;padding:18px 12px;border-right:1px solid #163c65}
+.sidebarBrand{padding:8px 10px 18px;border-bottom:1px solid #ffffff22;margin-bottom:10px}
+.sidebarBrand b{display:block;font-size:22px;letter-spacing:.02em}
+.sidebarBrand span{display:block;margin-top:4px;font-size:9px;letter-spacing:.13em;color:#b9cbe0}
+.sidebarHome,.navGroupHead,.navChildren button{width:100%;text-align:left;border-radius:9px;margin:3px 0}
+.sidebarHome,.navGroupHead{background:transparent;color:#eaf3fc;padding:11px 10px;font-weight:800;letter-spacing:.03em}
+.sidebarHome:hover,.navGroupHead:hover,.navGroupHead.activeGroup{background:#ffffff12}
+.sidebarHome.active{background:#fff;color:#0b5fc2}
+.navGroupHead{display:flex;align-items:center;justify-content:space-between}
+.navGroupHead .chev{font-size:18px;font-weight:400;color:#a9c2dc}
+.navChildren{padding:1px 0 6px 10px}
+.navChildren button{display:flex;align-items:center;justify-content:space-between;background:transparent;color:#bcd0e4;padding:9px 10px;font-weight:600;border-left:2px solid transparent;border-radius:6px}
+.navChildren button:hover{background:#ffffff0d;color:#fff}
+.navChildren button.active{background:#eaf3ff;color:#0b5fc2;border-left-color:#5ba2f5}
+.navChildren em{display:inline-grid;place-items:center;min-width:20px;height:20px;padding:0 6px;border-radius:999px;background:#d92d20;color:#fff;font-size:11px;font-style:normal}
+.appContent{min-width:0;display:flex;flex-direction:column;min-height:100vh}
+.topHeader{position:sticky;top:0;z-index:8;display:flex;justify-content:space-between;align-items:center;padding:14px 22px;background:#fff;border-bottom:1px solid #e7edf4}
+.topHeader b{color:#0b5fc2;font-size:18px}.topHeader span{font-size:11px;color:#7a8da3}
+.appContent>main{width:100%;max-width:none;margin:0;padding:24px}
+.appContent>footer{margin-top:auto}
+@media(max-width:900px){
+ .appFrame{grid-template-columns:1fr}
+ .mainSidebar{position:relative;height:auto;max-height:none}
+ .sidebarBrand{padding-bottom:12px}
+ .navGroup{border-top:1px solid #ffffff14}
+ .appContent>main{padding:16px 12px}
+}
