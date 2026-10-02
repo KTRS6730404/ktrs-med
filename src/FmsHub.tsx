@@ -4,10 +4,11 @@ import {supabase} from './supabase';
 type Tab='schedule'|'rehab'|'library'|'gps'|'video'|'prevention'|'report'|'team';
 const statusLabel:any={needs_attention:'要対応',rehab:'リハビリ中',observation:'経過観察',available:'問題なし'};
 function day(start?:string|null){if(!start)return null;const s=new Date(start+'T00:00:00');const n=new Date();s.setHours(0,0,0,0);n.setHours(0,0,0,0);return Math.floor((n.getTime()-s.getTime())/86400000)+1}
-export default function FmsHub(){
- const [tab,setTab]=useState<Tab>('schedule');
+export default function FmsHub({initialTab='schedule',compact=false,pageTitle}:{initialTab?:Tab;compact?:boolean;pageTitle?:string}){
+ const [tab,setTab]=useState<Tab>(initialTab);
+ useEffect(()=>{setTab(initialTab)},[initialTab]);
  const tabs:[Tab,string][]=[['schedule','スケジュール'],['rehab','リハビリ・受診'],['library','メニュー'],['gps','GPS'],['video','動画'],['prevention','傷害予防'],['report','レポート'],['team','TEAM']];
- return <section><div className="title"><h1>KTRS FMS</h1><p>高校サッカー育成年代の傷害予防・メディカル・パフォーマンス統合管理</p></div><div className="fmsTabs">{tabs.map(([k,l])=><button key={k} className={tab===k?'active':''} onClick={()=>setTab(k)}>{l}</button>)}</div>{tab==='schedule'&&<Schedule/>}{tab==='rehab'&&<Rehab/>}{tab==='library'&&<Library/>}{tab==='gps'&&<Gps/>}{tab==='video'&&<Video/>}{tab==='prevention'&&<Prevention/>}{tab==='report'&&<Report/>}{tab==='team'&&<Team/>}</section>
+ return <section><div className="title"><h1>{pageTitle||'KTRS FMS'}</h1><p>高校サッカー育成年代の傷害予防・メディカル・パフォーマンス統合管理</p></div>{!compact&&<div className="fmsTabs">{tabs.map(([k,l])=><button key={k} className={tab===k?'active':''} onClick={()=>setTab(k)}>{l}</button>)}</div>}{tab==='schedule'&&<Schedule/>}{tab==='rehab'&&<Rehab/>}{tab==='library'&&<Library/>}{tab==='gps'&&<Gps/>}{tab==='video'&&<Video/>}{tab==='prevention'&&<Prevention/>}{tab==='report'&&<Report/>}{tab==='team'&&<Team/>}</section>
 }
 function Schedule(){
  const blank:any={event_type:'training',title:'',starts_at:'',ends_at:'',venue:'',opponent:'',competition_name:'',training_theme:'',details:'',gps_enabled:false};
