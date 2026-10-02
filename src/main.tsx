@@ -1,13 +1,14 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { supabase } from './supabase';
+import FmsHub from './FmsHub';
 import './styles.css';
 
 type Role='player'|'staff';
 type Approval='pending'|'approved'|'rejected';
-type Profile={id:string;role:Role;full_name:string;school_grade:number|null;position:string|null;jersey_number:number|null;height_cm:number|null;weight_kg:number|null;dominant_foot:string|null;origin_team:string|null;avatar_path:string|null};
+type Profile={id:string;role:Role;full_name:string;school_grade:number|null;position:string|null;jersey_number:number|null;height_cm:number|null;weight_kg:number|null;dominant_foot:string|null;origin_team:string|null;avatar_path:string|null;player_registration_number:string|null;staff_title:string|null;team_id:number|null};
 type ApprovalRow={user_id:string;status:Approval;rejection_reason:string|null};
-type Screen='players'|'reports'|'team'|'case'|'chat'|'admin';
+type Screen='players'|'reports'|'team'|'case'|'fms'|'chat'|'admin';
 type PlayerScreen='mypage'|'report'|'history'|'physical'|'chat'|'settings';
 
 const statusLabel:Record<string,string>={needs_attention:'要対応',rehab:'リハビリ中',observation:'経過観察',available:'問題なし'};
@@ -36,7 +37,7 @@ function App(){
    setLoading(true);setError('');
    const uid=session.user.id;
    const [{data:p,error:pe},{data:a,error:ae},{data:ad,error:ade}]=await Promise.all([
-     supabase.from('profiles').select('id,role,full_name,school_grade,position,jersey_number,height_cm,weight_kg,dominant_foot,origin_team,avatar_path').eq('id',uid).maybeSingle(),
+     supabase.from('profiles').select('id,role,full_name,school_grade,position,jersey_number,height_cm,weight_kg,dominant_foot,origin_team,avatar_path,player_registration_number,staff_title,team_id').eq('id',uid).maybeSingle(),
      supabase.from('account_approvals').select('user_id,status,rejection_reason').eq('user_id',uid).maybeSingle(),
      supabase.from('app_admins').select('user_id').eq('user_id',uid).maybeSingle()
    ]);
@@ -75,6 +76,7 @@ function App(){
    {screen==='reports'&&<Reports profile={profile} isAdmin={isAdmin}/>}
    {screen==='players'&&<Players isAdmin={isAdmin}/>}
    {screen==='case'&&<><Cases isAdmin={isAdmin}/>{isAdmin&&<AdminPhysicalBulk/>}</>} 
+   {screen==='fms'&&<FmsHub/>} 
    {screen==='chat'&&<StaffChat profile={profile} isAdmin={isAdmin}/>}
    {screen==='admin'&&isAdmin&&<Admin/>}
  </Shell>;
@@ -82,7 +84,7 @@ function App(){
 
 function Auth(){
  const [mode,setMode]=useState<'login'|'signup'>('login'),[busy,setBusy]=useState(false),[msg,setMsg]=useState('');
- const [form,setForm]=useState<any>({email:'',password:'',password2:'',role:'player',full_name:'',school_grade:'1',position:'FW',height_cm:'',weight_kg:'',dominant_foot:'right',origin_team:''});
+ const [form,setForm]=useState<any>({email:'',password:'',password2:'',role:'player',full_name:'',school_grade:'1',position:'FW',height_cm:'',weight_kg:'',dominant_foot:'right',origin_team:'',player_registration_number:'',staff_title:''});
  async function submit(e:React.FormEvent){
    e.preventDefault();setBusy(true);setMsg('');
    if(mode==='signup'&&form.password!==form.password2){setMsg('パスワードが一致しません');setBusy(false);return}
@@ -90,32 +92,32 @@ function Auth(){
    if(mode==='login'){
      const {error}=await supabase.auth.signInWithPassword({email:form.email,password:form.password});if(error)setMsg(error.message);
    }else{
-     const metadata:any={role:form.role,full_name:form.full_name};
+     const metadata:any={role:form.role,full_name:form.full_name,player_registration_number:form.role==='player'?form.player_registration_number:null,staff_title:form.role==='staff'?form.staff_title:null};
      if(form.role==='player')Object.assign(metadata,{school_grade:Number(form.school_grade),position:form.position,height_cm:Number(form.height_cm),weight_kg:Number(form.weight_kg),dominant_foot:form.dominant_foot,origin_team:form.origin_team});
      const {error}=await supabase.auth.signUp({email:form.email,password:form.password,options:{data:metadata}});
      setMsg(error?error.message:'登録しました。管理者の承認後に利用できます。');
    }
    setBusy(false);
  }
- return <div className="authPage"><div className="authCard"><div className="brandBig">KTRS MED</div><div className="sub">FIELD MEDICAL HUB</div><h2>{mode==='login'?'ログイン':'アカウント新規作成'}</h2>
+ return <div className="authPage"><div className="authCard"><div className="brandBig">KTRS FMS</div><div className="sub">FOOTBALL MANAGEMENT SYSTEM</div><h2>{mode==='login'?'ログイン':'アカウント新規作成'}</h2>
  <form onSubmit={submit} className="form"><input placeholder="メールアドレス" type="email" required value={form.email} onChange={e=>setForm({...form,email:e.target.value})}/><input placeholder="パスワード" type="password" required value={form.password} onChange={e=>setForm({...form,password:e.target.value})}/>
- {mode==='signup'&&<><input placeholder="パスワード（確認）" type="password" required value={form.password2} onChange={e=>setForm({...form,password2:e.target.value})}/><input placeholder="氏名" required value={form.full_name} onChange={e=>setForm({...form,full_name:e.target.value})}/><select value={form.role} onChange={e=>setForm({...form,role:e.target.value})}><option value="player">選手</option><option value="staff">スタッフ</option></select>{form.role==='player'&&<div className="grid2"><select value={form.school_grade} onChange={e=>setForm({...form,school_grade:e.target.value})}><option>1</option><option>2</option><option>3</option></select><select value={form.position} onChange={e=>setForm({...form,position:e.target.value})}><option>GK</option><option>DF</option><option>MF</option><option>FW</option></select><input placeholder="身長 cm" type="number" required value={form.height_cm} onChange={e=>setForm({...form,height_cm:e.target.value})}/><input placeholder="体重 kg" type="number" required value={form.weight_kg} onChange={e=>setForm({...form,weight_kg:e.target.value})}/><select value={form.dominant_foot} onChange={e=>setForm({...form,dominant_foot:e.target.value})}><option value="right">右</option><option value="left">左</option><option value="both">両方</option></select><input placeholder="出身チーム" value={form.origin_team} onChange={e=>setForm({...form,origin_team:e.target.value})}/></div>}</>}
+ {mode==='signup'&&<><input placeholder="パスワード（確認）" type="password" required value={form.password2} onChange={e=>setForm({...form,password2:e.target.value})}/><input placeholder="氏名" required value={form.full_name} onChange={e=>setForm({...form,full_name:e.target.value})}/><select value={form.role} onChange={e=>setForm({...form,role:e.target.value})}><option value="player">選手</option><option value="staff">スタッフ</option></select>{form.role==='staff'&&<input placeholder="役職（例：トレーナー、コーチ）" value={form.staff_title} onChange={e=>setForm({...form,staff_title:e.target.value})}/>} {form.role==='player'&&<div className="grid2"><input placeholder="選手登録番号" value={form.player_registration_number} onChange={e=>setForm({...form,player_registration_number:e.target.value})}/><select value={form.school_grade} onChange={e=>setForm({...form,school_grade:e.target.value})}><option>1</option><option>2</option><option>3</option></select><select value={form.position} onChange={e=>setForm({...form,position:e.target.value})}><option>GK</option><option>DF</option><option>MF</option><option>FW</option></select><input placeholder="身長 cm" type="number" required value={form.height_cm} onChange={e=>setForm({...form,height_cm:e.target.value})}/><input placeholder="体重 kg" type="number" required value={form.weight_kg} onChange={e=>setForm({...form,weight_kg:e.target.value})}/><select value={form.dominant_foot} onChange={e=>setForm({...form,dominant_foot:e.target.value})}><option value="right">右</option><option value="left">左</option><option value="both">両方</option></select><input placeholder="出身チーム" value={form.origin_team} onChange={e=>setForm({...form,origin_team:e.target.value})}/></div>}</>}
  <button disabled={busy}>{busy?'処理中...':mode==='login'?'ログイン':'登録する'}</button></form>{msg&&<div className="notice">{msg}</div>}<button className="linkBtn" onClick={()=>setMode(mode==='login'?'signup':'login')}>{mode==='login'?'アカウントの新規作成':'ログインへ戻る'}</button><p className="fine">医療機関の診断に代わるものではありません。</p></div></div>;
 }
 
-function Pending({status,reason,onLogout}:{status?:Approval;reason?:string|null;onLogout:()=>void}){return <Center><div className="authCard"><h2>{status==='rejected'?'アカウントは承認されていません':'管理者の承認待ちです'}</h2><p>{status==='rejected'?(reason||'管理者にお問い合わせください。'):'承認後にKTRS MEDを利用できます。'}</p><button onClick={onLogout}>ログアウト</button></div></Center>}
+function Pending({status,reason,onLogout}:{status?:Approval;reason?:string|null;onLogout:()=>void}){return <Center><div className="authCard"><h2>{status==='rejected'?'アカウントは承認されていません':'管理者の承認待ちです'}</h2><p>{status==='rejected'?(reason||'管理者にお問い合わせください。'):'承認後にKTRS FMSを利用できます。'}</p><button onClick={onLogout}>ログアウト</button></div></Center>}
 
 function Shell({profile,isAdmin,screen,setScreen,alerts,onLogout,children}:any){
- const nav:[Screen,string][]=[['team','チーム状況'],['reports','選手報告'],['players','選手一覧'],['case','記録・判断'],['chat','チャット']];
+ const nav:[Screen,string][]=[['team','チーム状況'],['reports','選手報告'],['players','選手一覧'],['case','記録・判断'],['fms','FMS'],['chat','チャット']];
  const alertCount=(k:Screen)=>Number(alerts?.[k]||0);
- return <><header><div><b>KTRS MED</b><span> FIELD MEDICAL HUB</span></div><nav>{nav.map(([k,l])=>{const n=alertCount(k);return <button key={k} className={(screen===k?'active ':'')+(n>0?'unreadTab':'')} onClick={()=>setScreen(k)}>{l}{n>0&&<em>{n}</em>}</button>})}{isAdmin&&(()=>{const n=alertCount('admin');return <button className={(screen==='admin'?'active ':'')+(n>0?'unreadTab':'')} onClick={()=>setScreen('admin')}>管理{n>0&&<em>{n}</em>}</button>})()}</nav><div className="user">{profile?.full_name||''}<button onClick={onLogout}>ログアウト</button></div></header><main>{children}</main><footer>© K-TRAINERS. All rights reserved.<br/><span>傷害情報は認証されたサーバーに保存されます。</span></footer></>;
+ return <><header><div><b>KTRS FMS</b><span> FOOTBALL MANAGEMENT SYSTEM</span></div><nav>{nav.map(([k,l])=>{const n=alertCount(k);return <button key={k} className={(screen===k?'active ':'')+(n>0?'unreadTab':'')} onClick={()=>setScreen(k)}>{l}{n>0&&<em>{n}</em>}</button>})}{isAdmin&&(()=>{const n=alertCount('admin');return <button className={(screen==='admin'?'active ':'')+(n>0?'unreadTab':'')} onClick={()=>setScreen('admin')}>管理{n>0&&<em>{n}</em>}</button>})()}</nav><div className="user">{profile?.full_name||''}<button onClick={onLogout}>ログアウト</button></div></header><main>{children}</main><footer>© K-TRAINERS. All rights reserved.<br/><span>傷害情報は認証されたサーバーに保存されます。</span></footer></>;
 }
 
 
 function PlayerPortal({profile,session,onLogout}:{profile:Profile;session:any;onLogout:()=>void}){
  const [screen,setScreen]=useState<PlayerScreen>('mypage');
  const items:[PlayerScreen,string][]=[['mypage','マイページ'],['report','ケガの報告'],['history','ケガの履歴'],['physical','フィジカルデータ'],['chat','チャット'],['settings','設定']];
- return <div className="playerPortal"><header className="playerHeader"><div><b>KTRS MED</b><span> PLAYER PORTAL</span></div><div className="user">{profile.full_name} さん <button onClick={onLogout}>ログアウト</button></div></header><div className="playerBody"><aside className="playerSidebar">{items.map(([k,l])=><button key={k} className={screen===k?'active':''} onClick={()=>setScreen(k)}>{l}</button>)}</aside><main className="playerMain">{screen==='mypage'&&<PlayerMyPage profile={profile}/>} {screen==='report'&&<PlayerInjuryReport profile={profile} onDone={()=>setScreen('history')}/>} {screen==='history'&&<PlayerInjuryHistory profile={profile}/>} {screen==='physical'&&<PhysicalMeasurements profile={profile}/>} {screen==='chat'&&<PlayerChat profile={profile}/>} {screen==='settings'&&<PlayerSettings profile={profile} session={session}/>}</main></div><footer>© K-TRAINERS. All rights reserved.</footer></div>;
+ return <div className="playerPortal"><header className="playerHeader"><div><b>KTRS FMS</b><span> PLAYER PORTAL</span></div><div className="user">{profile.full_name} さん <button onClick={onLogout}>ログアウト</button></div></header><div className="playerBody"><aside className="playerSidebar">{items.map(([k,l])=><button key={k} className={screen===k?'active':''} onClick={()=>setScreen(k)}>{l}</button>)}</aside><main className="playerMain">{screen==='mypage'&&<PlayerMyPage profile={profile}/>} {screen==='report'&&<PlayerInjuryReport profile={profile} onDone={()=>setScreen('history')}/>} {screen==='history'&&<PlayerInjuryHistory profile={profile}/>} {screen==='physical'&&<PhysicalMeasurements profile={profile}/>} {screen==='chat'&&<PlayerChat profile={profile}/>} {screen==='settings'&&<PlayerSettings profile={profile} session={session}/>}</main></div><footer>© K-TRAINERS. All rights reserved.</footer></div>;
 }
 
 function PlayerMyPage({profile}:{profile:Profile}){
