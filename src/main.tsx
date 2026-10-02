@@ -8,7 +8,7 @@ type Role='player'|'staff';
 type Approval='pending'|'approved'|'rejected';
 type Profile={id:string;role:Role;full_name:string;school_grade:number|null;position:string|null;jersey_number:number|null;height_cm:number|null;weight_kg:number|null;dominant_foot:string|null;origin_team:string|null;avatar_path:string|null;player_registration_number:string|null;staff_title:string|null;team_id:number|null};
 type ApprovalRow={user_id:string;status:Approval;rejection_reason:string|null};
-type Screen='home'|'team_players'|'team_staff'|'team_teams'|'schedule_training'|'schedule_games'|'schedule_events'|'schedule_medical'|'performance_physical'|'performance_gps'|'performance_gps_game'|'performance_gps_tr'|'performance_body'|'performance_benchmark'|'medical_injury'|'medical_evaluation'|'medical_treatment'|'medical_rehab'|'medical_rtp'|'development_evaluation'|'development_objectives'|'development_reports'|'development_video'|'communication_chat'|'communication_announcement'|'communication_notifications'|'management_accounts'|'management_permissions'|'management_data'|'management_settings'|'set_categories';
+type Screen='home'|'team_players'|'team_staff'|'team_teams'|'schedule_training'|'schedule_games'|'schedule_events'|'schedule_medical'|'performance_physical'|'performance_gps'|'performance_gps_game'|'performance_gps_tr'|'performance_body'|'performance_benchmark'|'medical_injury'|'medical_evaluation'|'medical_treatment'|'medical_rehab'|'medical_rtp'|'development_evaluation'|'development_objectives'|'development_reports'|'development_video'|'communication_chat'|'communication_announcement'|'communication_notifications'|'management_accounts'|'management_permissions'|'management_data'|'management_settings'|'set_categories'|'set_account';
 type PlayerScreen='mypage'|'schedule'|'report'|'history'|'medical'|'rehab'|'rtp'|'physical'|'gps'|'messages'|'chat'|'settings';
 
 const statusLabel:Record<string,string>={needs_attention:'要対応',rehab:'リハビリ中',observation:'経過観察',available:'問題なし'};
@@ -105,6 +105,7 @@ function App(){
    {screen==='management_data'&&<FmsHub initialTab="report" compact pageTitle="MANAGEMENT / Data"/>}
    {screen==='management_settings'&&<ModulePlaceholder title="MANAGEMENT / Settings" text="KTRS FMS全体の設定を管理する画面です。"/>}
    {screen==='set_categories'&&isAdmin&&<CategorySettings profile={profile}/>}
+   {screen==='set_account'&&profile&&<AccountSettings profile={profile} session={session}/>}
 </Shell>;
 }
 
@@ -151,7 +152,7 @@ function Shell({profile,isAdmin,screen,setScreen,alerts,onLogout,children}:any){
    {key:'DEVELOPMENT',label:'DEVELOPMENT',items:[['development_evaluation','Player Evaluation'],['development_objectives','Objectives'],['development_reports','Reports'],['development_video','Video']]},
    {key:'COMMUNICATION',label:'COMMUNICATION',items:[['communication_chat','Chat'],['communication_announcement','Announcement'],['communication_notifications','Notifications']]},
    {key:'MANAGEMENT',label:'MANAGEMENT',items:[['management_accounts','Accounts'],['management_permissions','Permissions'],['management_data','Data'],['management_settings','Settings']]},
-   {key:'SET',label:'SET',items:[['set_categories','Categorys']]}
+   {key:'SET',label:'SET',items:[['set_categories','Categorys'],['set_account','Account']]}
  ];
  const alertFor=(s:Screen)=>s==='team_players'?Number(alerts?.players||0):s==='medical_injury'?Number(alerts?.case||0):s==='development_reports'?Number(alerts?.reports||0):s==='communication_chat'?Number(alerts?.chat||0):s==='management_accounts'?Number(alerts?.admin||0):0;
  return <div className="appFrame">
@@ -164,7 +165,7 @@ function Shell({profile,isAdmin,screen,setScreen,alerts,onLogout,children}:any){
        </button>
        {open[g.key]&&<div className="navChildren">
          {g.key==='PERFORMANCE'&&<div className="navNested"><button className={'navNestedHead '+(screen==='performance_gps'||screen==='performance_gps_game'||screen==='performance_gps_tr'?'active':'')} onClick={()=>setOpen(o=>({...o,GPS:!o.GPS}))}><span>GPS</span><span className="chev">{open.GPS?'−':'＋'}</span></button>{open.GPS&&<div className="navNestedChildren"><button className={screen==='performance_gps_game'?'active':''} onClick={()=>setScreen('performance_gps_game')}>Game</button><button className={screen==='performance_gps_tr'?'active':''} onClick={()=>setScreen('performance_gps_tr')}>TR</button></div>}</div>}
-         {g.items.filter(([k])=>isAdmin||(!k.startsWith('management_')&&!k.startsWith('set_'))).map(([k,l])=>{const n=alertFor(k);return <button key={k} className={screen===k?'active':''} onClick={()=>setScreen(k)}><span>{l}</span>{n>0&&<em>{n}</em>}</button>})}
+         {g.items.filter(([k])=>isAdmin||(!k.startsWith('management_')&&k!=='set_categories')).map(([k,l])=>{const n=alertFor(k);return <button key={k} className={screen===k?'active':''} onClick={()=>setScreen(k)}><span>{l}</span>{n>0&&<em>{n}</em>}</button>})}
        </div>}
      </div>)}
    </aside>
@@ -445,6 +446,65 @@ function DirectoryView({mode,isAdmin}:{mode:'staff'|'teams';isAdmin:boolean}){
 
 
 
+
+
+function AccountSettings({profile,session}:{profile:Profile;session:any}){
+ const [form,setForm]=useState<any>({full_name:profile.full_name||'',birth_date:'',phone:'',staff_title:profile.staff_title||'',avatar_path:profile.avatar_path||''});
+ const [email,setEmail]=useState(session?.user?.email||'');
+ const [password,setPassword]=useState('');
+ const [password2,setPassword2]=useState('');
+ const [msg,setMsg]=useState('');
+ const [uploading,setUploading]=useState(false);
+
+ useEffect(()=>{(async()=>{
+   const {data,error}=await supabase.from('profiles').select('full_name,birth_date,phone,staff_title,avatar_path,role').eq('id',profile.id).maybeSingle();
+   if(error)setMsg(error.message); else if(data)setForm({...form,...data});
+ })()},[profile.id]);
+
+ async function saveProfile(){
+   const payload:any={full_name:(form.full_name||'').trim(),birth_date:form.birth_date||null,phone:(form.phone||'').trim()||null,staff_title:(form.staff_title||'').trim()||null};
+   const {error}=await supabase.from('profiles').update(payload).eq('id',profile.id);
+   setMsg(error?error.message:'個人情報を保存しました。');
+ }
+
+ async function uploadAvatar(file:File){
+   setUploading(true);setMsg('');
+   if(!file.type.startsWith('image/')){setMsg('画像ファイルを選択してください。');setUploading(false);return}
+   if(file.size>5*1024*1024){setMsg('画像は5MB以下にしてください。');setUploading(false);return}
+   const ext=(file.name.split('.').pop()||'jpg').toLowerCase();
+   const path=`${profile.id}/avatar.${ext}`;
+   const {error:upErr}=await supabase.storage.from('profile-photos').upload(path,file,{upsert:true,contentType:file.type});
+   if(upErr){setMsg(upErr.message);setUploading(false);return}
+   const {error:pErr}=await supabase.from('profiles').update({avatar_path:path}).eq('id',profile.id);
+   setMsg(pErr?pErr.message:'顔写真を更新しました。');
+   if(!pErr)setForm((x:any)=>({...x,avatar_path:path}));
+   setUploading(false);
+ }
+
+ async function saveEmail(){
+   const next=email.trim();
+   if(!next){setMsg('メールアドレスを入力してください。');return}
+   if(next===session?.user?.email){setMsg('メールアドレスは変更されていません。');return}
+   const {error}=await supabase.auth.updateUser({email:next});
+   setMsg(error?error.message:'確認メールを送信しました。メール認証後にログインIDが変更されます。');
+ }
+
+ async function savePassword(){
+   if(password.length<8||!/[A-Za-z]/.test(password)||!/[0-9]/.test(password)){setMsg('パスワードは8文字以上で、英字と数字を両方含めてください。');return}
+   if(password!==password2){setMsg('確認用パスワードが一致しません。');return}
+   const {error}=await supabase.auth.updateUser({password});
+   setMsg(error?error.message:'パスワードを変更しました。');
+   if(!error){setPassword('');setPassword2('')}
+ }
+
+ return <section><Title t="SET / Account" s="個人情報とログイン情報を変更"/>
+   {msg&&<div className="notice">{msg}</div>}
+   <div className="panel form"><h3>顔写真</h3><div className="avatarSetting"><Avatar path={form.avatar_path} name={form.full_name||profile.full_name} size={96}/><div><input type="file" accept="image/jpeg,image/png,image/webp" onChange={e=>{const file=e.target.files?.[0];if(file)uploadAvatar(file)}}/><p className="fine">JPEG・PNG・WebP、5MB以下</p>{uploading&&<span className="fine">アップロード中...</span>}</div></div></div>
+   <div className="panel form"><h3>個人情報</h3><div className="grid2"><label>氏名<input value={form.full_name||''} onChange={e=>setForm({...form,full_name:e.target.value})}/></label><label>生年月日<input type="date" value={form.birth_date||''} onChange={e=>setForm({...form,birth_date:e.target.value})}/></label><label>電話番号<input value={form.phone||''} onChange={e=>setForm({...form,phone:e.target.value})}/></label><label>役職・肩書<input value={form.staff_title||''} onChange={e=>setForm({...form,staff_title:e.target.value})}/></label></div><button onClick={saveProfile}>個人情報を保存</button></div>
+   <div className="panel form"><h3>ログインID（メールアドレス）</h3><input type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="メールアドレス"/><p className="fine">メールアドレス変更時は確認メールによる認証が必要です。</p><button onClick={saveEmail}>メールアドレスを変更</button></div>
+   <div className="panel form"><h3>パスワード</h3><div className="grid2"><input type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="新しいパスワード"/><input type="password" value={password2} onChange={e=>setPassword2(e.target.value)} placeholder="新しいパスワード（確認）"/></div><p className="fine">8文字以上・英字と数字を両方含む</p><button onClick={savePassword}>パスワードを変更</button></div>
+ </section>;
+}
 
 
 function CategorySettings({profile}:{profile:Profile|null}){
