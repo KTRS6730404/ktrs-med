@@ -74,7 +74,7 @@ function App(){
 
  return <Shell profile={profile} isAdmin={isAdmin} screen={screen} setScreen={changeScreen} alerts={alerts} onLogout={()=>supabase.auth.signOut()}>
    {error&&<div className="error">{error}</div>}
-   {screen==='home'&&<Team isAdmin={isAdmin}/>}
+   {screen==='home'&&<Team isAdmin={isAdmin} profile={profile}/>}
    {screen==='team_players'&&<Players isAdmin={isAdmin}/>}
    {screen==='team_staff'&&<DirectoryView mode="staff" isAdmin={isAdmin}/>}
    {screen==='team_teams'&&<DirectoryView mode="teams" isAdmin={isAdmin}/>}
@@ -329,21 +329,88 @@ function DirectoryView({mode,isAdmin}:{mode:'staff'|'teams';isAdmin:boolean}){
  return <section><Title t="TEAM / Teams" s="チーム・カテゴリー管理"/><div className="tableWrap"><table><thead><tr><th>チーム名</th><th>カテゴリー</th><th>学年</th></tr></thead><tbody>{rows.map(r=><tr key={r.id}><td><b>{r.name}</b></td><td>{r.category||'-'}</td><td>{r.school_year||'-'}</td></tr>)}</tbody></table></div></section>;
 }
 
-function Team({isAdmin}:{isAdmin:boolean}){
- const [d,setD]=useState<any>(null);
- useEffect(()=>{supabase.from('team_status_summary').select('*').maybeSingle().then(({data})=>setD(data))},[]);
- const total=Number(d?.registered_players||0);
- const pct=(n:any)=>total?Math.round(Number(n||0)*1000/total)/10:0;
- return <section><Title t="チーム状況" s="登録選手数を基準にした本日のメディカル状況"/><div className="cards">
- <Stat n={total} l="登録選手" c="info"/>
- <Stat n={d?.needs_attention||0} l="要対応" c="danger" p={pct(d?.needs_attention)}/>
- <Stat n={d?.rehab||0} l="リハビリ" c="info" p={pct(d?.rehab)}/>
- <Stat n={d?.observation||0} l="経過観察" c="warn" p={pct(d?.observation)}/>
- <Stat n={d?.unavailable_today||0} l="参加不可" c="danger" p={pct(d?.unavailable_today)}/>
- <Stat n={d?.restricted_today||0} l="制限あり" c="warn" p={pct(d?.restricted_today)}/>
- </div>{isAdmin&&<div className="adminHint">管理者は「選手一覧」から各選手の対応・参加状況を編集できます。</div>}</section>;
-}
 
+function Team({isAdmin,profile}:{isAdmin:boolean;profile:Profile|null}){
+ const [players,setPlayers]=useState<any[]>([]);
+ const [messages,setMessages]=useState<any[]>([]);
+ const [schedule,setSchedule]=useState<any[]>([]);
+ const [staff,setStaff]=useState<any[]>([]);
+ const [msg,setMsg]=useState('');
+ const [saving,setSaving]=useState<string>('');
+
+ const weekDates=useMemo(()=>{
+   const now=new Date();
+   const day=(now.getDay()+6)%7;
+   const monday=new Date(now); monday.setHours(0,0,0,0); monday.setDate(now.getDate()-day);
+   return Array.from({length:7},(_,i)=>{const d=new Date(monday);d.setDate(monday.getDate()+i);return d});
+ },[]);
+ const iso=(d:Date)=>{const y=d.getFullYear(),m=String(d.getMonth()+1).padStart(2,'0'),day=String(d.getDate()).padStart(2,'0');return y+'-'+m+'-'+day};
+ const weekStart=iso(weekDates[0]),weekEnd=iso(weekDates[6]);
+
+ useEffect(()=>{load()},[]);
+ async function load(){
+   const [{data:p},{data:m},{data:s},{data:st}]=await Promise.all([
+     supabase.from('player_directory').select('*').eq('is_hidden',false).order('school_grade',{ascending:false}).order('full_name'),
+     profile?.id?supabase.from('chat_messages').select('id,sender_id,recipient_id,body,created_at,read_at').eq('recipient_id',profile.id).order('created_at',{ascending:false}).limit(5):Promise.resolve({data:[]} as any),
+     supabase.from('player_schedule').select('id,schedule_date,event_type,opponent,starts_at,ends_at,location,staff_name,notes,title,category,details').is('player_id',null).gte('schedule_date',weekStart).lte('schedule_date',weekEnd).order('schedule_date'),
+     supabase.from('profiles').select('id,full_name,role').eq('role','staff').order('full_name')
+   ]);
+   setPlayers(p||[]);setMessages(m||[]);setSchedule(s||[]);setStaff(st||[]);
+ }
+ const peopleMap=new Map(staff.map((x:any)=>[x.id,x.full_name]));
+ const nonParticipants=players.filter(p=>p.today_availability==='out');
+ const participants=Math.max(0,players.length-nonParticipants.length);
+ const rowFor=(date:string)=>schedule.find(x=>x.schedule_date===date)||{schedule_date:date,event_type:'TR',opponent:'',starts_at:null,ends_at:null,location:'',staff_name:'',notes:''};
+ const timeOf=(v:any)=>v?new Date(v).toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit',hour12:false}):'';
+ const toTs=(date:string,time:string)=>time?date+'T'+time+':00+09:00':date+'T09:00:00+09:00';
+
+ function updateLocal(date:string,key:string,value:any){
+   setSchedule(prev=>{
+     const found=prev.find(x=>x.schedule_date===date);
+     if(found)return prev.map(x=>x.schedule_date===date?{...x,[key]:value}:x);
+     return [...prev,{...rowFor(date),[key]:value}];
+   });
+ }
+ async function saveDay(date:string){
+   if(!isAdmin)return;
+   const r=rowFor(date);
+   setSaving(date);setMsg('');
+   const payload:any={
+     player_id:null,
+     schedule_date:date,
+     event_type:r.event_type||'TR',
+     title:r.event_type==='Game'?(r.opponent?'Game vs '+r.opponent:'Game'):(r.event_type||'TR'),
+     category:r.event_type||'TR',
+     opponent:r.opponent||null,
+     starts_at:toTs(date,r.start_time||timeOf(r.starts_at)),
+     ends_at:(r.end_time||timeOf(r.ends_at))?toTs(date,r.end_time||timeOf(r.ends_at)):null,
+     location:r.location||null,
+     staff_name:r.staff_name||null,
+     notes:r.notes||null,
+     details:r.notes||null,
+     created_by:profile?.id||null
+   };
+   let error:any=null;
+   if(r.id){
+     const res=await supabase.from('player_schedule').update(payload).eq('id',r.id);error=res.error;
+   }else{
+     const res=await supabase.from('player_schedule').insert(payload);error=res.error;
+   }
+   setMsg(error?error.message:'スケジュールを保存しました。');
+   setSaving('');if(!error)await load();
+ }
+
+ return <section className="homePage"><Title t="HOME" s="メッセージ・本日のTR参加状況・今週の予定をまとめて確認"/>
+ <div className="homeGrid">
+   <div className="panel homeMessages"><h3>新着メッセージ</h3>{messages.length?messages.map(m=><div className={'homeMessage '+(!m.read_at?'unreadMessage':'')} key={m.id}><b>{peopleMap.get(m.sender_id)||'選手・スタッフ'}</b><span>{new Date(m.created_at).toLocaleString('ja-JP')}</span><p>{m.body}</p></div>):<div className="empty">新着メッセージはありません。</div>}</div>
+   <div className="panel attendanceCard"><h3>TR参加人数</h3><div className="attendanceCount"><b>{participants}</b><span> / {players.length}名</span></div><details className="absenceDetails"><summary>TR不参加者 {nonParticipants.length}名</summary>{nonParticipants.length?nonParticipants.map(p=><div className="absenceRow" key={p.player_id}><div className="personCell"><Avatar path={p.avatar_path} name={p.full_name} size={34}/><b>{p.full_name}</b></div><div>{p.school_grade||'-'}年 / {p.position||'-'}</div><div>{p.injury_name||'傷害情報なし'}</div><div>{p.pain_score!=null?'Pain '+p.pain_score+'/10':'Pain -'}</div></div>):<div className="empty">TR不参加者はいません。</div>}</details></div>
+ </div>
+
+ <div className="panel weeklySchedule"><div className="scheduleHeader"><div><h3>今週のスケジュール</h3><p>{weekStart} 〜 {weekEnd}</p></div>{msg&&<span className="notice inlineNotice">{msg}</span>}</div>
+ <div className="weekTableWrap"><table className="weekTable"><thead><tr><th>日付</th><th>予定</th><th>対戦相手</th><th>時間</th><th>場所</th><th>担当者</th><th>自由記述</th>{isAdmin&&<th>保存</th>}</tr></thead><tbody>{weekDates.map(d=>{const date=iso(d),r=rowFor(date),start=r.start_time??timeOf(r.starts_at),end=r.end_time??timeOf(r.ends_at);return <tr key={date}><td><b>{d.toLocaleDateString('ja-JP',{month:'numeric',day:'numeric',weekday:'short'})}</b></td><td>{isAdmin?<select value={r.event_type||'TR'} onChange={e=>updateLocal(date,'event_type',e.target.value)}><option value="TR">TR</option><option value="Game">Game</option><option value="OFF">OFF</option><option value="Other">Other</option></select>:<span className="pill info">{r.event_type||'-'}</span>}</td><td>{isAdmin?<input value={r.opponent||''} placeholder={r.event_type==='Game'?'対戦相手':'-'} onChange={e=>updateLocal(date,'opponent',e.target.value)} disabled={r.event_type!=='Game'}/>:r.opponent||'-'}</td><td>{isAdmin?<div className="timePair"><input type="time" value={start} onChange={e=>updateLocal(date,'start_time',e.target.value)}/><span>〜</span><input type="time" value={end} onChange={e=>updateLocal(date,'end_time',e.target.value)}/></div>:(start?(start+(end?'〜'+end:'')):'-')}</td><td>{isAdmin?<input value={r.location||''} placeholder="場所" onChange={e=>updateLocal(date,'location',e.target.value)}/>:r.location||'-'}</td><td>{isAdmin?<select value={r.staff_name||''} onChange={e=>updateLocal(date,'staff_name',e.target.value)}><option value="">担当者を選択</option>{staff.map(s=><option key={s.id} value={s.full_name}>{s.full_name}</option>)}</select>:r.staff_name||'-'}</td><td>{isAdmin?<textarea rows={2} value={r.notes||''} placeholder="自由記述" onChange={e=>updateLocal(date,'notes',e.target.value)}/>:r.notes||'-'}</td>{isAdmin&&<td><button onClick={()=>saveDay(date)} disabled={saving===date}>{saving===date?'保存中':'保存'}</button></td>}</tr>})}</tbody></table></div>
+ </div>
+ </section>;
+}
 
 function Players({isAdmin}:{isAdmin:boolean}){
  const [rows,setRows]=useState<any[]>([]),[loading,setLoading]=useState(true),[msg,setMsg]=useState('');
