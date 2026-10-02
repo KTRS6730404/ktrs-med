@@ -64,7 +64,7 @@ function MiniLineChart({title,subtitle,rows,series}:{title:string;subtitle:strin
 
 function Gps(){
  const [players,setPlayers]=useState<any[]>([]),[sessions,setSessions]=useState<any[]>([]),[metrics,setMetrics]=useState<any[]>([]),[knows,setKnows]=useState<any[]>([]),[msg,setMsg]=useState('');
- const [sort,setSort]=useState<{key:string;dir:'asc'|'desc'}>({key:'athlete_name',dir:'asc'});
+ const [sort,setSort]=useState<{key:string;dir:'asc'|'desc'}>({key:'athlete_name',dir:'asc'});\n const [showImport,setShowImport]=useState(false),[dragging,setDragging]=useState(false),[importFile,setImportFile]=useState<File|null>(null),[importing,setImporting]=useState(false);\n const [importMeta,setImportMeta]=useState<any>({session_date:new Date().toISOString().slice(0,10),kickoff_time:'',venue:'',opponent:''});
  const [sf,setSf]=useState<any>({session_date:new Date().toISOString().slice(0,10),session_name:'',session_type:'training',duration_minutes:''}),[mf,setMf]=useState<any>({gps_session_id:'',player_id:'',total_distance_m:'',meters_per_min:'',hsr_distance_m:'',sprint_distance_m:'',sprint_count:'',max_speed_kmh:'',acceleration_count:'',deceleration_count:''});
  async function load(){
    const [{data:p},{data:s},{data:m},{data:k}]=await Promise.all([
@@ -79,6 +79,70 @@ function Gps(){
  async function addSession(){const {data:{user}}=await supabase.auth.getUser();if(!user)return;const {error}=await supabase.from('gps_sessions').insert({...sf,duration_minutes:sf.duration_minutes?Number(sf.duration_minutes):null,created_by:user.id});setMsg(error?error.message:'GPSセッション追加');if(!error)load()}
  async function addMetric(){const {data:{user}}=await supabase.auth.getUser();if(!user||!mf.gps_session_id||!mf.player_id)return;const prev=metrics.filter(x=>x.player_id===mf.player_id&&x.hsr_distance_m!=null).slice(0,5);const avg=prev.length?prev.reduce((a,x)=>a+Number(x.hsr_distance_m),0)/prev.length:0;const h=mf.hsr_distance_m?Number(mf.hsr_distance_m):0;const pct=avg?Math.round((h-avg)/avg*100):null;const feedback=pct==null?'比較データがまだありません。':'HSRは直近平均より'+(pct>=0?'+':'')+pct+'%。最終判断はスタッフが行ってください。';const p:any={...mf,feedback,created_by:user.id};['gps_session_id','sprint_count','acceleration_count','deceleration_count'].forEach(k=>p[k]=p[k]?Number(p[k]):null);['total_distance_m','meters_per_min','hsr_distance_m','sprint_distance_m','max_speed_kmh'].forEach(k=>p[k]=p[k]?Number(p[k]):null);const {error}=await supabase.from('gps_player_metrics').upsert(p,{onConflict:'gps_session_id,player_id'});setMsg(error?error.message:'GPSデータ保存');if(!error)load()}
  async function deleteKnows(id:number,name:string){if(!confirm(name+' のGPSデータを削除しますか？'))return;const {error}=await supabase.from('knows_gps_imports').delete().eq('id',id);setMsg(error?error.message:'GPSデータを削除しました。');if(!error)load()}
+ function parseCsv(text:string){
+   const out:string[][]=[];let row:string[]=[],cell='',quoted=false;
+   for(let i=0;i<text.length;i++){const ch=text[i],next=text[i+1];
+     if(ch==='"'){if(quoted&&next==='"'){cell+='"';i++}else quoted=!quoted}
+     else if(ch===','&&!quoted){row.push(cell);cell=''}
+     else if((ch==='\n'||ch==='\r')&&!quoted){if(ch==='\r'&&next==='\n')i++;row.push(cell);cell='';if(row.some(v=>v.trim()!==''))out.push(row);row=[]}
+     else cell+=ch;
+   }
+   if(cell||row.length){row.push(cell);if(row.some(v=>v.trim()!==''))out.push(row)}
+   return out;
+ }
+ function headerIndex(headers:string[],names:string[]){
+   const norm=(v:string)=>v.trim().toLowerCase().replace(/[\s_()\[\]\/.-]/g,'');
+   const hs=headers.map(norm);
+   for(const n of names){const i=hs.indexOf(norm(n));if(i>=0)return i}
+   return -1;
+ }
+ async function importKnows(){
+   if(!importFile||!importMeta.session_date){setMsg('CSVファイルと日付を設定してください。');return}
+   setImporting(true);setMsg('');
+   try{
+     const text=await importFile.text();
+     const rows=parseCsv(text);
+     if(rows.length<2)throw new Error('CSVデータを読み取れませんでした。');
+     const headers=rows[0];
+     const iName=headerIndex(headers,['Name','Player','Athlete','選手名','氏名']);
+     const iDistance=headerIndex(headers,['Distance','Total Distance','総走行距離']);
+     const iSprintD=headerIndex(headers,['SPD_D_Z6','Sprint Distance','スプリント距離']);
+     const iSprint=headerIndex(headers,['Sprint','Sprint Count','スプリント回数']);
+     const iSi=headerIndex(headers,['SI_D','SI']);
+     const iHi=headerIndex(headers,['HI_D','HI']);
+     const iAcc=headerIndex(headers,['Accel_Z3','Acceleration','加速']);
+     const iDec=headerIndex(headers,['Decel_Z3','Deceleration','減速']);
+     if(iName<0||iDistance<0)throw new Error('Knows CSVの選手名またはDistance列を確認できません。');
+     const num=(v:any)=>{const n=Number(String(v??'').replace(/,/g,''));return Number.isFinite(n)?n:0};
+     const {data:{user}}=await supabase.auth.getUser();
+     if(!user)throw new Error('ログイン情報を確認できません。');
+     const payload=rows.slice(1).map(r=>({
+       session_date:importMeta.session_date,
+       session_name:'Knows CSV',
+       kickoff_time:importMeta.kickoff_time||null,
+       venue:importMeta.venue||null,
+       opponent:importMeta.opponent||null,
+       athlete_name:String(r[iName]||'').trim(),
+       total_distance_m:num(r[iDistance]),
+       sprint_distance_m:iSprintD>=0?num(r[iSprintD]):null,
+       sprint_count:iSprint>=0?Math.round(num(r[iSprint])):null,
+       si:iSi>=0?num(r[iSi]):null,
+       hi:iHi>=0?num(r[iHi]):null,
+       acceleration_count:iAcc>=0?Math.round(num(r[iAcc])):null,
+       deceleration_count:iDec>=0?Math.round(num(r[iDec])):null,
+       source_file:importFile.name,
+       created_by:user.id
+     })).filter(r=>r.athlete_name&&r.total_distance_m>=1000);
+     if(!payload.length)throw new Error('総走行距離1000m以上の選手データがありません。');
+     const {error}=await supabase.from('knows_gps_imports').upsert(payload,{onConflict:'session_date,session_name,athlete_name'});
+     if(error)throw error;
+     setMsg(payload.length+'名のGPSデータを取り込みました。');
+     setImportFile(null);setShowImport(false);await load();
+   }catch(e:any){setMsg(e?.message||'CSV取込に失敗しました。')}
+   setImporting(false);
+ }
+ function acceptFile(file?:File|null){if(!file)return;if(!file.name.toLowerCase().endsWith('.csv')){setMsg('CSVファイルを選択してください。');return}setImportFile(file);setShowImport(true)}
+
  const matchGroups=knows.reduce((acc:any,row:any)=>{
    const key=[row.session_date,row.kickoff_time||'',row.venue||'',row.opponent||'',row.session_name||''].join('|');
    (acc[key] ||= []).push(row); return acc;
