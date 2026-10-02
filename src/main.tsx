@@ -79,7 +79,7 @@ function App(){
    {screen==='team_staff'&&<DirectoryView mode="staff" isAdmin={isAdmin}/>}
    {screen==='team_teams'&&<DirectoryView mode="teams" isAdmin={isAdmin}/>}
    {screen==='schedule_training'&&<FmsHub initialTab="schedule" compact pageTitle="SCHEDULE / Training"/>}
-   {screen==='schedule_games'&&<FmsHub initialTab="schedule" compact pageTitle="SCHEDULE / Games"/>}
+   {screen==='schedule_games'&&<GameAnalysis profile={profile}/>} 
    {screen==='schedule_events'&&<FmsHub initialTab="schedule" compact pageTitle="SCHEDULE / Events"/>}
    {screen==='schedule_medical'&&<FmsHub initialTab="schedule" compact pageTitle="SCHEDULE / Medical"/>}
    {screen==='performance_physical'&&<><Title t="PERFORMANCE / Physical" s="フィジカル測定と経時変化"/><AdminPhysicalBulk/></>}
@@ -213,25 +213,121 @@ function PlayerPortal({profile,session,onLogout}:{profile:Profile;session:any;on
  </div>;
 }
 
+function GameAnalysis({profile}:{profile:Profile|null}){
+ const [games,setGames]=useState<any[]>([]);
+ const [players,setPlayers]=useState<any[]>([]);
+ const [selected,setSelected]=useState<any|null>(null);
+ const [review,setReview]=useState<any|null>(null);
+ const [comment,setComment]=useState('');
+ const [media,setMedia]=useState<any[]>([]);
+ const [evals,setEvals]=useState<Record<string,{grade:string;comment:string}>>({});
+ const [files,setFiles]=useState<File[]>([]);
+ const [msg,setMsg]=useState('');
+ const [saving,setSaving]=useState(false);
+
+ useEffect(()=>{loadBase()},[]);
+ async function loadBase(){
+   const [{data:g,error:ge},{data:p,error:pe}]=await Promise.all([
+     supabase.from('player_schedule').select('id,schedule_date,starts_at,entry_label,event_type,opponent,competition_name,location,notes').is('player_id',null).eq('event_type','Game').order('schedule_date',{ascending:false}).limit(60),
+     supabase.from('profiles').select('id,full_name,school_grade,position,avatar_path').eq('role','player').eq('is_hidden',false).order('school_grade',{ascending:false}).order('full_name')
+   ]);
+   if(ge||pe)setMsg((ge||pe)?.message||'読み込みエラー');
+   setGames(g||[]);setPlayers(p||[]);
+ }
+ async function openGame(game:any){
+   setSelected(game);setMsg('');setFiles([]);
+   const [{data:r},{data:e}]=await Promise.all([
+     supabase.from('game_reviews').select('*').eq('schedule_id',game.id).maybeSingle(),
+     supabase.from('player_game_evaluations').select('player_id,grade,comment').eq('schedule_id',game.id)
+   ]);
+   setReview(r||null);setComment(r?.team_comment||'');
+   const map:Record<string,{grade:string;comment:string}>={};
+   (e||[]).forEach((x:any)=>map[x.player_id]={grade:x.grade,comment:x.comment||''});
+   setEvals(map);
+   if(r?.id){
+     const {data:m}=await supabase.from('game_review_media').select('*').eq('game_review_id',r.id).order('created_at');
+     const withUrls=await Promise.all((m||[]).map(async(x:any)=>{
+       const {data}=await supabase.storage.from('game-review-media').createSignedUrl(x.storage_path,3600);
+       return {...x,url:data?.signedUrl||''};
+     }));
+     setMedia(withUrls);
+   }else setMedia([]);
+ }
+ function setEval(id:string,key:'grade'|'comment',value:string){
+   setEvals(prev=>({...prev,[id]:{grade:prev[id]?.grade||'',comment:prev[id]?.comment||'',[key]:value}}));
+ }
+ async function saveReview(){
+   if(!selected||!profile?.id)return;
+   setSaving(true);setMsg('');
+   let reviewId=review?.id;
+   if(reviewId){
+     const {error}=await supabase.from('game_reviews').update({team_comment:comment||null,updated_by:profile.id,updated_at:new Date().toISOString()}).eq('id',reviewId);
+     if(error){setMsg(error.message);setSaving(false);return}
+   }else{
+     const {data,error}=await supabase.from('game_reviews').insert({schedule_id:selected.id,team_comment:comment||null,created_by:profile.id,updated_by:profile.id}).select().single();
+     if(error){setMsg(error.message);setSaving(false);return}
+     reviewId=data.id;setReview(data);
+   }
+   const rows=Object.entries(evals).filter(([,v])=>v.grade).map(([player_id,v])=>({schedule_id:selected.id,player_id,grade:v.grade,comment:v.comment||null,evaluated_by:profile.id,updated_at:new Date().toISOString()}));
+   if(rows.length){
+     const {error}=await supabase.from('player_game_evaluations').upsert(rows,{onConflict:'schedule_id,player_id'});
+     if(error){setMsg(error.message);setSaving(false);return}
+   }
+   for(const file of files){
+     if(!file.type.startsWith('image/')&&!file.type.startsWith('video/'))continue;
+     const safe=file.name.replace(/[^a-zA-Z0-9._-]/g,'_');
+     const path=`${selected.id}/${Date.now()}-${Math.random().toString(36).slice(2)}-${safe}`;
+     const {error:upErr}=await supabase.storage.from('game-review-media').upload(path,file,{contentType:file.type});
+     if(upErr){setMsg(upErr.message);setSaving(false);return}
+     const {error:metaErr}=await supabase.from('game_review_media').insert({game_review_id:reviewId,storage_path:path,file_name:file.name,mime_type:file.type,file_size:file.size,uploaded_by:profile.id});
+     if(metaErr){setMsg(metaErr.message);setSaving(false);return}
+   }
+   setFiles([]);setMsg('試合分析を保存しました。');setSaving(false);await openGame(selected);
+ }
+ async function removeMedia(item:any){
+   if(!window.confirm('この写真・動画を削除しますか？'))return;
+   const {error:s}=await supabase.storage.from('game-review-media').remove([item.storage_path]);
+   if(s){setMsg(s.message);return}
+   const {error:d}=await supabase.from('game_review_media').delete().eq('id',item.id);
+   setMsg(d?d.message:'削除しました。');if(!d&&selected)openGame(selected);
+ }
+
+ return <section><Title t="SCHEDULE / Games"/>
+   {msg&&<div className="notice">{msg}</div>}
+   {!selected?<div className="gameAnalysisList">{games.length?games.map((g:any)=><button className="panel gameAnalysisCard" key={g.id} onClick={()=>openGame(g)}><div><span>{g.schedule_date}</span><h3>{g.opponent?'vs '+g.opponent:'Game'}</h3>{g.competition_name&&<b>{g.competition_name}</b>}{g.location&&<small>{g.location}</small>}</div><span className="gameAnalysisArrow">›</span></button>):<div className="panel empty">Gameの予定がありません。</div>}</div>:
+   <div className="gameAnalysisEditor">
+     <div className="panel gameAnalysisHeader"><button className="secondary" onClick={()=>setSelected(null)}>← 試合一覧</button><div><span>{selected.schedule_date}</span><h2>{selected.opponent?'vs '+selected.opponent:'Game'}</h2><p>{[selected.competition_name,selected.location].filter(Boolean).join(' / ')}</p></div></div>
+     <div className="panel form"><h3>試合分析コメント</h3><textarea rows={6} value={comment} onChange={e=>setComment(e.target.value)} placeholder="試合全体の振り返り、良かった点、改善点などを入力"/></div>
+     <div className="panel form"><h3>写真・動画</h3><input type="file" multiple accept="image/*,video/*" onChange={e=>setFiles(Array.from(e.target.files||[]))}/>{files.length>0&&<p className="fine">{files.length}ファイルを保存時にアップロードします。</p>}<div className="gameMediaGrid">{media.map((m:any)=><div className="gameMediaItem" key={m.id}>{m.mime_type.startsWith('image/')?<img src={m.url} alt={m.file_name}/>:<video src={m.url} controls preload="metadata"/>}<div><span>{m.file_name}</span><button className="dangerBtn" onClick={()=>removeMedia(m)}>削除</button></div></div>)}</div></div>
+     <div className="panel"><div className="sofaSectionHead"><div><span className="sectionKicker">PLAYER RATING</span><h3>選手評価 A〜E</h3></div></div><div className="tableWrap"><table><thead><tr><th>選手</th><th>学年/Pos</th><th>評価</th><th>コメント</th></tr></thead><tbody>{players.map((p:any)=><tr key={p.id}><td><div className="personCell"><Avatar path={p.avatar_path} name={p.full_name} size={34}/><b>{p.full_name}</b></div></td><td>{p.school_grade||'-'}年 / {p.position||'-'}</td><td><div className="gradeButtons">{['A','B','C','D','E'].map(g=><button key={g} className={'gradeButton '+(evals[p.id]?.grade===g?'selected grade'+g:'')} onClick={()=>setEval(p.id,'grade',g)}>{g}</button>)}</div></td><td><input value={evals[p.id]?.comment||''} onChange={e=>setEval(p.id,'comment',e.target.value)} placeholder="個別コメント"/></td></tr>)}</tbody></table></div></div>
+     <div className="gameAnalysisSave"><button disabled={saving} onClick={saveReview}>{saving?'保存中...':'試合分析を保存'}</button></div>
+   </div>}
+ </section>;
+}
+
+
 function PlayerMyPage({profile}:{profile:Profile}){
  const [active,setActive]=useState<any[]>([]);
  const [messages,setMessages]=useState<any[]>([]);
  const [schedule,setSchedule]=useState<any[]>([]);
  const [gps,setGps]=useState<any|null>(null);
  const [rehab,setRehab]=useState<any|null>(null);
+ const [latestEval,setLatestEval]=useState<any|null>(null);
 
  useEffect(()=>{(async()=>{
    const today=new Date();const todayIso=today.toISOString().slice(0,10);const end=new Date(today);end.setDate(today.getDate()+7);
    const {data:cases}=await supabase.from('injury_cases').select('id,injury_name,body_part,current_status,injury_date,rehab_start_date,rehab_stage').eq('player_id',profile.id).neq('current_status','available').order('injury_date',{ascending:false});
    const caseIds=(cases||[]).map((x:any)=>x.id);
-   const [m,s,g,r]=await Promise.all([
+   const [m,s,g,r,e]=await Promise.all([
      supabase.from('player_messages').select('id,title,body,created_at').eq('player_id',profile.id).order('created_at',{ascending:false}).limit(3),
      supabase.from('player_schedule').select('id,title,starts_at,ends_at,category,entry_label,event_type,opponent,competition_name,location').or('player_id.is.null,player_id.eq.'+profile.id).gte('schedule_date',todayIso).lte('schedule_date',end.toISOString().slice(0,10)).order('schedule_date',{ascending:true}).order('starts_at',{ascending:true}).limit(5),
      supabase.from('gps_player_metrics').select('id,total_distance_m,hsr_distance_m,sprint_distance_m,sprint_count,max_speed_kmh,created_at,gps_sessions(session_date,session_name,session_type)').eq('player_id',profile.id).order('created_at',{ascending:false}).limit(1).maybeSingle(),
-     caseIds.length?supabase.from('rehab_progress').select('id,case_id,stage_name,progress_percent,next_plan,recorded_at').in('case_id',caseIds).order('recorded_at',{ascending:false}).limit(1).maybeSingle():Promise.resolve({data:null} as any)
+     caseIds.length?supabase.from('rehab_progress').select('id,case_id,stage_name,progress_percent,next_plan,recorded_at').in('case_id',caseIds).order('recorded_at',{ascending:false}).limit(1).maybeSingle():Promise.resolve({data:null} as any),
+     supabase.from('player_game_evaluations').select('id,grade,comment,created_at,schedule_id,player_schedule(schedule_date,opponent,competition_name)').eq('player_id',profile.id).order('created_at',{ascending:false}).limit(1).maybeSingle()
    ]);
    setActive(cases||[]);setMessages(m.data||[]);setSchedule(s.data||[]);setGps(g.data||null);
    if(r.data){const ci=(cases||[]).find((x:any)=>x.id===r.data.case_id);setRehab({...r.data,injury_name:ci?.injury_name||''})}else setRehab(null);
+   setLatestEval(e.data||null);
  })()},[profile.id]);
 
  const bmi=profile.height_cm&&profile.weight_kg?profile.weight_kg/Math.pow(profile.height_cm/100,2):null;
@@ -280,6 +376,10 @@ function PlayerMyPage({profile}:{profile:Profile}){
          {schedule.length?<div className="sofaScheduleList">{schedule.map((s:any)=><div className="sofaScheduleRow" key={s.id}><div className="sofaDateBox"><b>{new Date(s.starts_at||s.schedule_date).getDate()}</b><span>{new Date(s.starts_at||s.schedule_date).toLocaleDateString('ja-JP',{month:'short'})}</span></div><div><b>{s.entry_label||s.title||s.event_type||'-'}</b>{s.event_type==='Game'&&s.opponent&&<span>vs {s.opponent}</span>}{s.competition_name&&<small>{s.competition_name}</small>}{s.location&&<small>{s.location}</small>}</div></div>)}</div>:<div className="empty compact">今週の予定はありません。</div>}
        </div>
 
+       {latestEval&&<div className="panel sofaSection">
+         <div className="sofaSectionHead"><div><span className="sectionKicker">GAME REVIEW</span><h3>最新の試合評価</h3></div><span className={'gameGrade grade'+latestEval.grade}>{latestEval.grade}</span></div>
+         <div className="latestGameEval"><b>{latestEval.player_schedule?.schedule_date||''} {latestEval.player_schedule?.opponent?'vs '+latestEval.player_schedule.opponent:''}</b>{latestEval.player_schedule?.competition_name&&<span>{latestEval.player_schedule.competition_name}</span>}{latestEval.comment&&<p>{latestEval.comment}</p>}</div>
+       </div>}
        <div className="panel sofaSection">
          <div className="sofaSectionHead"><div><span className="sectionKicker">INFO</span><h3>お知らせ</h3></div></div>
          {messages.length?<div className="sofaMessageList">{messages.map((m:any)=><div className="sofaMessageRow" key={m.id}><b>{m.title}</b><p>{m.body||''}</p><small>{new Date(m.created_at).toLocaleDateString('ja-JP')}</small></div>)}</div>:<div className="empty compact">新着のお知らせはありません。</div>}
