@@ -8,7 +8,7 @@ type Role='player'|'staff';
 type Approval='pending'|'approved'|'rejected';
 type Profile={id:string;role:Role;full_name:string;school_grade:number|null;position:string|null;jersey_number:number|null;height_cm:number|null;weight_kg:number|null;dominant_foot:string|null;origin_team:string|null;avatar_path:string|null;player_registration_number:string|null;staff_title:string|null;team_id:number|null};
 type ApprovalRow={user_id:string;status:Approval;rejection_reason:string|null};
-type Screen='home'|'team_players'|'team_staff'|'team_teams'|'schedule_training'|'schedule_games'|'schedule_events'|'schedule_medical'|'performance_physical'|'performance_gps'|'performance_body'|'performance_benchmark'|'medical_injury'|'medical_evaluation'|'medical_treatment'|'medical_rehab'|'medical_rtp'|'development_evaluation'|'development_objectives'|'development_reports'|'development_video'|'communication_chat'|'communication_announcement'|'communication_notifications'|'management_accounts'|'management_permissions'|'management_data'|'management_settings';
+type Screen='home'|'team_players'|'team_staff'|'team_teams'|'schedule_training'|'schedule_games'|'schedule_events'|'schedule_medical'|'performance_physical'|'performance_gps'|'performance_body'|'performance_benchmark'|'medical_injury'|'medical_evaluation'|'medical_treatment'|'medical_rehab'|'medical_rtp'|'development_evaluation'|'development_objectives'|'development_reports'|'development_video'|'communication_chat'|'communication_announcement'|'communication_notifications'|'management_accounts'|'management_permissions'|'management_data'|'management_settings'|'set_schedule_categories';
 type PlayerScreen='mypage'|'schedule'|'report'|'history'|'medical'|'rehab'|'rtp'|'physical'|'gps'|'messages'|'chat'|'settings';
 
 const statusLabel:Record<string,string>={needs_attention:'要対応',rehab:'リハビリ中',observation:'経過観察',available:'問題なし'};
@@ -102,6 +102,7 @@ function App(){
    {screen==='management_permissions'&&<ModulePlaceholder title="MANAGEMENT / Permissions" text="ロール・閲覧範囲・編集権限を管理する画面です。"/>}
    {screen==='management_data'&&<FmsHub initialTab="report" compact pageTitle="MANAGEMENT / Data"/>}
    {screen==='management_settings'&&<ModulePlaceholder title="MANAGEMENT / Settings" text="KTRS FMS全体の設定を管理する画面です。"/>}
+   {screen==='set_schedule_categories'&&isAdmin&&<ScheduleCategorySettings profile={profile}/>}
  </Shell>;
 }
 
@@ -131,7 +132,7 @@ function Auth(){
 function Pending({status,reason,onLogout}:{status?:Approval;reason?:string|null;onLogout:()=>void}){return <Center><div className="authCard"><h2>{status==='rejected'?'アカウントは承認されていません':'管理者の承認待ちです'}</h2><p>{status==='rejected'?(reason||'管理者にお問い合わせください。'):'承認後にKTRS FMSを利用できます。'}</p><button onClick={onLogout}>ログアウト</button></div></Center>}
 
 function Shell({profile,isAdmin,screen,setScreen,alerts,onLogout,children}:any){
- const [open,setOpen]=useState<Record<string,boolean>>({TEAM:true,SCHEDULE:false,PERFORMANCE:false,MEDICAL:true,DEVELOPMENT:false,COMMUNICATION:false,MANAGEMENT:false});
+ const [open,setOpen]=useState<Record<string,boolean>>({TEAM:true,SCHEDULE:false,PERFORMANCE:false,MEDICAL:true,DEVELOPMENT:false,COMMUNICATION:false,MANAGEMENT:false,SET:false});
  const groups:{key:string;label:string;items:[Screen,string][]}[]=[
    {key:'TEAM',label:'TEAM',items:[['team_players','Players'],['team_staff','Staff'],['team_teams','Teams']]},
    {key:'SCHEDULE',label:'SCHEDULE',items:[['schedule_training','Training'],['schedule_games','Games'],['schedule_events','Events'],['schedule_medical','Medical']]},
@@ -139,7 +140,8 @@ function Shell({profile,isAdmin,screen,setScreen,alerts,onLogout,children}:any){
    {key:'MEDICAL',label:'MEDICAL',items:[['medical_injury','Injury'],['medical_evaluation','Evaluation'],['medical_treatment','Treatment'],['medical_rehab','Rehabilitation'],['medical_rtp','Return to Play']]},
    {key:'DEVELOPMENT',label:'DEVELOPMENT',items:[['development_evaluation','Player Evaluation'],['development_objectives','Objectives'],['development_reports','Reports'],['development_video','Video']]},
    {key:'COMMUNICATION',label:'COMMUNICATION',items:[['communication_chat','Chat'],['communication_announcement','Announcement'],['communication_notifications','Notifications']]},
-   {key:'MANAGEMENT',label:'MANAGEMENT',items:[['management_accounts','Accounts'],['management_permissions','Permissions'],['management_data','Data'],['management_settings','Settings']]}
+   {key:'MANAGEMENT',label:'MANAGEMENT',items:[['management_accounts','Accounts'],['management_permissions','Permissions'],['management_data','Data'],['management_settings','Settings']]},
+   {key:'SET',label:'SET',items:[['set_schedule_categories','Schedule Categories']]}
  ];
  const alertFor=(s:Screen)=>s==='team_players'?Number(alerts?.players||0):s==='medical_injury'?Number(alerts?.case||0):s==='development_reports'?Number(alerts?.reports||0):s==='communication_chat'?Number(alerts?.chat||0):s==='management_accounts'?Number(alerts?.admin||0):0;
  return <div className="appFrame">
@@ -150,7 +152,7 @@ function Shell({profile,isAdmin,screen,setScreen,alerts,onLogout,children}:any){
        <button className={'navGroupHead '+(g.items.some(([k])=>k===screen)?'activeGroup':'')} onClick={()=>setOpen(o=>({...o,[g.key]:!o[g.key]}))}>
          <span>{g.label}</span><span className="chev">{open[g.key]?'−':'＋'}</span>
        </button>
-       {open[g.key]&&<div className="navChildren">{g.items.filter(([k])=>isAdmin||!k.startsWith('management_')).map(([k,l])=>{const n=alertFor(k);return <button key={k} className={screen===k?'active':''} onClick={()=>setScreen(k)}><span>{l}</span>{n>0&&<em>{n}</em>}</button>})}</div>}
+       {open[g.key]&&<div className="navChildren">{g.items.filter(([k])=>isAdmin||(!k.startsWith('management_')&&!k.startsWith('set_'))).map(([k,l])=>{const n=alertFor(k);return <button key={k} className={screen===k?'active':''} onClick={()=>setScreen(k)}><span>{l}</span>{n>0&&<em>{n}</em>}</button>})}</div>}
      </div>)}
    </aside>
    <div className="appContent">
@@ -431,15 +433,51 @@ function DirectoryView({mode,isAdmin}:{mode:'staff'|'teams';isAdmin:boolean}){
 
 
 
+
+function ScheduleCategorySettings({profile}:{profile:Profile|null}){
+ const [rows,setRows]=useState<any[]>([]),[name,setName]=useState(''),[msg,setMsg]=useState('');
+ useEffect(()=>{load()},[]);
+ async function load(){const {data,error}=await supabase.from('schedule_entry_categories').select('*').order('sort_order').order('name');if(error)setMsg(error.message);setRows(data||[])}
+ async function add(){
+   const n=name.trim();if(!n)return;
+   const existing=rows.find((x:any)=>x.name===n);
+   if(existing){
+     if(!existing.is_active){const {error}=await supabase.from('schedule_entry_categories').update({is_active:true,updated_at:new Date().toISOString()}).eq('id',existing.id);setMsg(error?error.message:'カテゴリーを再表示しました。');if(!error){setName('');load()}}
+     else setMsg('同じカテゴリーがすでにあります。');
+     return;
+   }
+   const {error}=await supabase.from('schedule_entry_categories').insert({name:n,sort_order:rows.length+1,created_by:profile?.id||null});
+   setMsg(error?error.message:'カテゴリーを追加しました。');if(!error){setName('');load()}
+ }
+ async function remove(cat:any){
+   const {count,error:countError}=await supabase.from('player_schedule').select('id',{count:'exact',head:true}).eq('entry_label',cat.name);
+   if(countError){setMsg(countError.message);return}
+   if((count||0)>0){
+     const {error}=await supabase.from('schedule_entry_categories').update({is_active:false,updated_at:new Date().toISOString()}).eq('id',cat.id);
+     setMsg(error?error.message:'使用済みカテゴリーのため、履歴を残して非表示にしました。');
+   }else{
+     const {error}=await supabase.from('schedule_entry_categories').delete().eq('id',cat.id);
+     setMsg(error?error.message:'未使用カテゴリーを削除しました。');
+   }
+   load();
+ }
+ async function restore(cat:any){
+   const {error}=await supabase.from('schedule_entry_categories').update({is_active:true,updated_at:new Date().toISOString()}).eq('id',cat.id);
+   setMsg(error?error.message:'カテゴリーを再表示しました。');if(!error)load();
+ }
+ return <section><Title t="SET / Schedule Categories"/>
+   {msg&&<div className="notice">{msg}</div>}
+   <div className="panel form"><h3>カテゴリー追加</h3><div className="categoryAddRow"><input value={name} placeholder="カテゴリー名" onChange={e=>setName(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();add()}}}/><button onClick={add}>＋ 追加</button></div></div>
+   <div className="panel"><h3>カテゴリー一覧</h3><div className="categoryManageList">{rows.map((cat:any)=><div className="categoryManageRow" key={cat.id}><div><b className={!cat.is_active?'archivedCategory':''}>{cat.name}</b><small>{cat.is_active?'使用中':'非表示'}</small></div>{cat.is_active?<button className="dangerBtn" onClick={()=>remove(cat)}>削除</button>:<button className="secondary" onClick={()=>restore(cat)}>再表示</button>}</div>)}</div></div>
+ </section>;
+}
+
 function Team({isAdmin,profile}:{isAdmin:boolean;profile:Profile|null}){
  const [players,setPlayers]=useState<any[]>([]);
  const [messages,setMessages]=useState<any[]>([]);
  const [schedule,setSchedule]=useState<any[]>([]);
  const [staff,setStaff]=useState<any[]>([]);
  const [categories,setCategories]=useState<any[]>([]);
- const [showCategoryManager,setShowCategoryManager]=useState(false);
- const [newCategory,setNewCategory]=useState('');
- const [categoryTarget,setCategoryTarget]=useState<{date:string;key:any}|null>(null);
  const [msg,setMsg]=useState('');
  const [saving,setSaving]=useState<string>('');
 
@@ -481,28 +519,21 @@ function Team({isAdmin,profile}:{isAdmin:boolean;profile:Profile|null}){
  const entriesFor=(date:string)=>schedule.filter(x=>x.schedule_date===date);
  function patchEntry(date:string,keyId:any,key:string,value:any){setSchedule(prev=>prev.map(x=>(x.id||x.temp_id)===keyId?{...x,[key]:value}:x))}
  function addEntry(date:string){setSchedule(prev=>[...prev,blank(date,entriesFor(date).length)])}
- async function addCategory(){
-   const name=newCategory.trim();if(!name||!isAdmin)return;
+ async function quickAddCategory(date:string,key:any){
+   if(!isAdmin)return;
+   const raw=window.prompt('追加するカテゴリー名を入力してください。');
+   const name=(raw||'').trim();if(!name)return;
+   const existing=categories.find((x:any)=>x.name===name);
+   if(existing){
+     if(!existing.is_active){
+       const {error}=await supabase.from('schedule_entry_categories').update({is_active:true,updated_at:new Date().toISOString()}).eq('id',existing.id);
+       if(error){setMsg(error.message);return}
+     }
+     patchEntry(date,key,'entry_label',name);await load();return;
+   }
    const {data,error}=await supabase.from('schedule_entry_categories').insert({name,sort_order:categories.length+1,created_by:profile?.id||null}).select().single();
    if(error){setMsg(error.message);return}
-   setNewCategory('');setCategories(prev=>[...prev,data]);
-   if(categoryTarget){patchEntry(categoryTarget.date,categoryTarget.key,'entry_label',name);setCategoryTarget(null)}
- }
- async function archiveOrDeleteCategory(cat:any){
-   if(!isAdmin)return;
-   const {count}=await supabase.from('player_schedule').select('id',{count:'exact',head:true}).eq('entry_label',cat.name);
-   if((count||0)>0){
-     const {error}=await supabase.from('schedule_entry_categories').update({is_active:false,updated_at:new Date().toISOString()}).eq('id',cat.id);
-     setMsg(error?error.message:'使用済みカテゴリーを非表示にしました。');
-   }else{
-     const {error}=await supabase.from('schedule_entry_categories').delete().eq('id',cat.id);
-     setMsg(error?error.message:'未使用カテゴリーを削除しました。');
-   }
-   load();
- }
- async function restoreCategory(cat:any){
-   const {error}=await supabase.from('schedule_entry_categories').update({is_active:true,updated_at:new Date().toISOString()}).eq('id',cat.id);
-   setMsg(error?error.message:'カテゴリーを再表示しました。');if(!error)load();
+   setCategories(prev=>[...prev,data]);patchEntry(date,key,'entry_label',name);
  }
  async function removeEntry(date:string,r:any){
    if(r.id){const {error}=await supabase.from('player_schedule').delete().eq('id',r.id);setMsg(error?error.message:'予定を削除しました。');if(!error)load()}
@@ -531,12 +562,8 @@ function Team({isAdmin,profile}:{isAdmin:boolean;profile:Profile|null}){
    {nonParticipants.length?<><div className="absenceBreakdown">{Object.entries(reasonCounts).map(([k,v])=><span key={k}>{k} <b>{String(v)}名</b></span>)}</div>{nonParticipants.map(p=><div className="absenceRow" key={p.player_id}><div className="personCell"><Avatar path={p.avatar_path} name={p.full_name} size={34}/><b>{p.full_name}</b></div><div>{p.school_grade||'-'}年 / {p.position||'-'}</div><div><span className="pill warn">{reasonLabel(p)}</span>{p.injury_name&&<small>{p.injury_name}</small>}</div><div>{p.pain_score!=null?'Pain '+p.pain_score+'/10':'Pain -'}</div></div>)}</>:<div className="empty">TR不参加者はいません。</div>}</details></div>
  </div>
 
- <div className="panel weeklySchedule"><div className="scheduleHeader"><div><h3>今週のスケジュール</h3><p>{weekStart} 〜 {weekEnd}</p></div><div className="scheduleHeaderActions">{isAdmin&&<button className="secondary" onClick={()=>setShowCategoryManager(v=>!v)}>カテゴリー管理</button>}{msg&&<span className="notice inlineNotice">{msg}</span>}</div></div>
- {showCategoryManager&&isAdmin&&<div className="categoryManager">
-   <div className="categoryAddRow"><input placeholder="新しいカテゴリー名" value={newCategory} onChange={e=>setNewCategory(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();addCategory()}}}/><button onClick={addCategory}>追加</button></div>
-   <div className="categoryManageList">{categories.map((cat:any)=><div className="categoryManageRow" key={cat.id}><span className={!cat.is_active?'archivedCategory':''}>{cat.name}</span>{cat.is_active?<button className="dangerBtn" onClick={()=>archiveOrDeleteCategory(cat)}>削除</button>:<button className="secondary" onClick={()=>restoreCategory(cat)}>再表示</button>}</div>)}</div>
- </div>}
- <div className="scheduleDays">{weekDates.map(d=>{const date=iso(d);return <div className="scheduleDay" key={date}><div className="scheduleDayHead"><b>{d.toLocaleDateString('ja-JP',{month:'numeric',day:'numeric',weekday:'short'})}</b>{isAdmin&&<button className="secondary" onClick={()=>addEntry(date)}>＋ 追加</button>}</div>{entriesFor(date).map((r:any,idx:number)=>{const key=r.id||r.temp_id;const start=r.start_time??timeOf(r.starts_at);const opponentEnabled=r.event_type==='Game'||r.event_type==='TRM';return <div className="scheduleEntry" key={key}><select className="entryLabelInput" disabled={!isAdmin} value={r.entry_label||('カテゴリー '+(idx+1))} onChange={e=>{if(e.target.value==='__add__'){setCategoryTarget({date,key});setNewCategory('');setShowCategoryManager(true)}else patchEntry(date,key,'entry_label',e.target.value)}}>{categories.filter((cat:any)=>cat.is_active||cat.name===r.entry_label).map((cat:any)=><option key={cat.id} value={cat.name}>{cat.name}</option>)}<option value="__add__">＋ カテゴリー追加</option></select><select disabled={!isAdmin} value={r.event_type||'TR'} onChange={e=>patchEntry(date,key,'event_type',e.target.value)}><option value="TR">TR</option><option value="Game">Game</option><option value="TRM">TRM</option><option value="OFF">OFF</option><option value="Other">Other</option></select>{opponentEnabled?<input disabled={!isAdmin} value={r.opponent||''} placeholder="対戦相手" onChange={e=>patchEntry(date,key,'opponent',e.target.value)}/>:<div className="opponentSpacer"></div>}<input disabled={!isAdmin} type="time" value={start} onChange={e=>patchEntry(date,key,'start_time',e.target.value)}/><input disabled={!isAdmin} value={r.location||''} placeholder="場所" onChange={e=>patchEntry(date,key,'location',e.target.value)}/><div className="staffMulti"><div className="staffChips">{(r.staff_names||[]).map((n:string)=><span className="staffChip" key={n}>{n}{isAdmin&&<button type="button" onClick={()=>removeStaff(date,r,n)}>×</button>}</span>)}</div>{isAdmin&&<div className="staffAdd"><select defaultValue="" onChange={e=>{addStaff(date,r,e.target.value);e.currentTarget.value=''}}><option value="">担当者</option>{staff.map(s=><option key={s.id} value={s.full_name}>{s.full_name}</option>)}</select><button type="button" className="secondary" onClick={e=>{const sel=(e.currentTarget.previousElementSibling as HTMLSelectElement);addStaff(date,r,sel.value);sel.value=''}}>追加</button></div>}</div><textarea disabled={!isAdmin} rows={2} value={r.notes||''} placeholder="自由記述" onChange={e=>patchEntry(date,key,'notes',e.target.value)}/>{isAdmin&&<div className="scheduleActions"><button onClick={()=>saveEntry(date,r)} disabled={saving===String(key)}>{saving===String(key)?'保存中':'保存'}</button><button className="dangerBtn" onClick={()=>removeEntry(date,r)}>削除</button></div>}</div>})}</div>})}</div>
+ <div className="panel weeklySchedule"><div className="scheduleHeader"><div><h3>今週のスケジュール</h3><p>{weekStart} 〜 {weekEnd}</p></div>{msg&&<span className="notice inlineNotice">{msg}</span>}</div>
+ <div className="scheduleDays">{weekDates.map(d=>{const date=iso(d);return <div className="scheduleDay" key={date}><div className="scheduleDayHead"><b>{d.toLocaleDateString('ja-JP',{month:'numeric',day:'numeric',weekday:'short'})}</b>{isAdmin&&<button className="secondary" onClick={()=>addEntry(date)}>＋ 追加</button>}</div>{entriesFor(date).map((r:any,idx:number)=>{const key=r.id||r.temp_id;const start=r.start_time??timeOf(r.starts_at);const opponentEnabled=r.event_type==='Game'||r.event_type==='TRM';return <div className="scheduleEntry" key={key}><select className="entryLabelInput" disabled={!isAdmin} value={r.entry_label||('カテゴリー '+(idx+1))} onChange={e=>{if(e.target.value==='__add__'){e.currentTarget.value=r.entry_label||('カテゴリー '+(idx+1));quickAddCategory(date,key)}else patchEntry(date,key,'entry_label',e.target.value)}}>{categories.filter((cat:any)=>cat.is_active||cat.name===r.entry_label).map((cat:any)=><option key={cat.id} value={cat.name}>{cat.name}</option>)}<option value="__add__">＋ カテゴリー追加</option></select><select disabled={!isAdmin} value={r.event_type||'TR'} onChange={e=>patchEntry(date,key,'event_type',e.target.value)}><option value="TR">TR</option><option value="Game">Game</option><option value="TRM">TRM</option><option value="OFF">OFF</option><option value="Other">Other</option></select>{opponentEnabled?<input disabled={!isAdmin} value={r.opponent||''} placeholder="対戦相手" onChange={e=>patchEntry(date,key,'opponent',e.target.value)}/>:<div className="opponentSpacer"></div>}<input disabled={!isAdmin} type="time" value={start} onChange={e=>patchEntry(date,key,'start_time',e.target.value)}/><input disabled={!isAdmin} value={r.location||''} placeholder="場所" onChange={e=>patchEntry(date,key,'location',e.target.value)}/><div className="staffMulti"><div className="staffChips">{(r.staff_names||[]).map((n:string)=><span className="staffChip" key={n}>{n}{isAdmin&&<button type="button" onClick={()=>removeStaff(date,r,n)}>×</button>}</span>)}</div>{isAdmin&&<div className="staffAdd"><select defaultValue="" onChange={e=>{addStaff(date,r,e.target.value);e.currentTarget.value=''}}><option value="">担当者</option>{staff.map(s=><option key={s.id} value={s.full_name}>{s.full_name}</option>)}</select><button type="button" className="secondary" onClick={e=>{const sel=(e.currentTarget.previousElementSibling as HTMLSelectElement);addStaff(date,r,sel.value);sel.value=''}}>追加</button></div>}</div><textarea disabled={!isAdmin} rows={2} value={r.notes||''} placeholder="自由記述" onChange={e=>patchEntry(date,key,'notes',e.target.value)}/>{isAdmin&&<div className="scheduleActions"><button onClick={()=>saveEntry(date,r)} disabled={saving===String(key)}>{saving===String(key)?'保存中':'保存'}</button><button className="dangerBtn" onClick={()=>removeEntry(date,r)}>削除</button></div>}</div>})}</div>})}</div>
  </div>
  </section>;
 }
