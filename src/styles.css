@@ -268,8 +268,10 @@ main{max-width:none}
 .cropCard{max-width:620px;width:min(94vw,620px)}
 .avatarCropStage{position:relative;width:320px;height:320px;margin:12px auto;background:#e9eef4;overflow:hidden;touch-action:none;border-radius:12px}
 .avatarCropStage>img{position:absolute;inset:50% auto auto 50%;max-width:320px;max-height:320px;transform:translate(-50%,-50%);user-select:none;pointer-events:none}
-.avatarCropMask{position:absolute;border-radius:50%;border:3px solid #fff;box-shadow:0 0 0 999px rgba(20,34,48,.58),0 0 0 1px rgba(20,34,48,.3);cursor:grab;touch-action:none}
-.avatarCropMask:active{cursor:grabbing}
+.avatarCropFixedCircle{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);border-radius:50%;border:3px solid #fff;box-shadow:0 0 0 999px rgba(20,34,48,.58),0 0 0 1px rgba(20,34,48,.3);pointer-events:none}
+.cropZoomRow{display:grid;grid-template-columns:auto 1fr auto auto;align-items:center;gap:10px;margin:12px auto;max-width:420px}
+.cropZoomRow input[type="range"]{width:100%}
+.cropZoomRow span,.cropZoomRow b{font-size:12px;color:#60758a}
 .cropPreviewRow{display:flex;align-items:center;justify-content:center;gap:14px;margin:12px 0}
 .cropPreview{border-radius:50%;overflow:hidden;background:#e9eef4;border:1px solid #d3dce6}
 @media(max-width:520px){.avatarCropStage{width:280px;height:280px}.avatarCropStage>img{max-width:280px;max-height:280px}}
