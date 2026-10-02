@@ -662,7 +662,7 @@ function StaffChat({profile,isAdmin}:{profile:Profile|null;isAdmin:boolean}){
  }
  const map=new Map(people.map(p=>[p.id,p]));
  const nameOf=(id:string)=>map.get(id)?.full_name||'不明';
- const groupIds=(value:string)=>{
+ const groupIds=(value:string):string[]=>{
    if(value==='all_players')return people.filter(p=>p.role==='player').map(p=>p.id);
    if(value==='grade3')return people.filter(p=>p.role==='player'&&Number(p.school_grade)===3).map(p=>p.id);
    if(value==='grade2')return people.filter(p=>p.role==='player'&&Number(p.school_grade)===2).map(p=>p.id);
@@ -842,8 +842,7 @@ function CategorySettings({profile}:{profile:Profile|null}){
  async function load(){
    const [{data:s,error:se},{data:c,error:ce}]=await Promise.all([
      supabase.from('schedule_entry_categories').select('*').order('sort_order').order('name'),
-     supabase.from('schedule_competitions').select('*').order('sort_order').order('name'),
-     isAdmin?supabase.rpc('admin_list_accounts',{filter_status:'pending'}):Promise.resolve({data:[]} as any)
+     supabase.from('schedule_competitions').select('*').order('sort_order').order('name')
    ]);
    if(se||ce)setMsg((se||ce)?.message||'読み込みに失敗しました。');
    setScheduleRows(s||[]);setCompetitionRows(c||[]);
@@ -952,7 +951,8 @@ function Team({isAdmin,profile}:{isAdmin:boolean;profile:Profile|null}){
      supabase.from('player_schedule').select('id,schedule_date,entry_label,event_type,opponent,competition_name,starts_at,location,staff_names,notes,title,category,details').is('player_id',null).gte('schedule_date',weekStart).lte('schedule_date',weekEnd).order('schedule_date').order('id'),
      supabase.from('profiles').select('id,full_name,role').eq('role','staff').order('full_name'),
      supabase.from('schedule_entry_categories').select('*').order('sort_order').order('name'),
-     supabase.from('schedule_competitions').select('*').order('sort_order').order('name')
+     supabase.from('schedule_competitions').select('*').order('sort_order').order('name'),
+     isAdmin?supabase.rpc('admin_list_accounts',{filter_status:'pending'}):Promise.resolve({data:[]} as any)
    ]);
    const existing:any[]=s||[];
    const seeded:any[]=[...existing];
