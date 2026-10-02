@@ -329,3 +329,28 @@ main{max-width:none}
 .sofaMessageRow small{color:#8795a4}
 @media(max-width:900px){.playerHomeGrid{grid-template-columns:1fr}.sofaStatGrid{grid-template-columns:repeat(2,1fr)}.sofaStatGrid>div{border-bottom:1px solid #edf1f5}.playerHeroMain{grid-template-columns:auto 1fr}.playerAvailability{grid-column:1/-1;justify-items:start}.playerQuickStats{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:560px){.playerHeroMain{padding:16px}.playerHeroIdentity h1{font-size:22px}.playerQuickStats{grid-template-columns:repeat(2,1fr)}.sofaStatGrid{grid-template-columns:1fr 1fr}.playerHeroMain .avatar{width:78px!important;height:78px!important;min-width:78px!important}}
+
+.gameAnalysisList{display:grid;gap:12px}
+.gameAnalysisCard{width:100%;display:flex;align-items:center;justify-content:space-between;text-align:left;border:0;cursor:pointer}
+.gameAnalysisCard div{display:grid;gap:3px}
+.gameAnalysisCard h3{margin:0}
+.gameAnalysisCard span,.gameAnalysisCard small{color:#748698}
+.gameAnalysisArrow{font-size:30px;color:#9aabba!important}
+.gameAnalysisEditor{display:grid;gap:14px}
+.gameAnalysisHeader{display:flex;align-items:center;gap:16px}
+.gameAnalysisHeader h2{margin:2px 0}
+.gameAnalysisHeader p{margin:0;color:#748698}
+.gameMediaGrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px;margin-top:12px}
+.gameMediaItem{border:1px solid #e3eaf1;border-radius:12px;overflow:hidden;background:#fff}
+.gameMediaItem img,.gameMediaItem video{width:100%;height:160px;object-fit:cover;background:#0f1720}
+.gameMediaItem>div{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px}
+.gameMediaItem span{font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.gradeButtons{display:flex;gap:5px;flex-wrap:wrap}
+.gradeButton{width:34px;height:34px;padding:0;border-radius:50%;border:1px solid #d7e1ea;background:#fff;color:#456}
+.gradeButton.selected{color:#fff;font-weight:800;border-color:transparent}
+.gradeA{background:#1d8f55!important}.gradeB{background:#4aa56f!important}.gradeC{background:#d6a620!important}.gradeD{background:#e47b28!important}.gradeE{background:#c94b4b!important}
+.gameGrade{display:grid;place-items:center;width:38px;height:38px;border-radius:50%;color:#fff;font-weight:900}
+.latestGameEval{padding:16px 18px;display:grid;gap:4px}
+.latestGameEval span,.latestGameEval p{font-size:12px;color:#65798c;margin:0}
+.gameAnalysisSave{display:flex;justify-content:flex-end;position:sticky;bottom:14px;z-index:3}
+@media(max-width:720px){.gameAnalysisHeader{align-items:flex-start;flex-direction:column}.gradeButtons{min-width:190px}.gameMediaGrid{grid-template-columns:1fr 1fr}}
