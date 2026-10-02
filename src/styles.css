@@ -183,3 +183,21 @@ main{max-width:none}
 .absenceBreakdown span{padding:6px 9px;border:1px solid #dde6ef;border-radius:999px;font-size:12px;background:#fff}
 .entryLabelInput{font-weight:700}
 .opponentSpacer{min-height:40px}
+
+.gpsToolbar{display:flex;justify-content:flex-end;margin-bottom:10px}
+.gpsImportPanel{margin-bottom:14px}
+.gpsDropZone{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;min-height:150px;margin-top:12px;padding:18px;border:2px dashed #b8c8d8;border-radius:12px;background:#f8fbfe;cursor:pointer;text-align:center}
+.gpsDropZone.dragging{border-color:#4f83b5;background:#eef6fc}
+.gpsDropZone input{display:none}
+.gpsDropZone span{font-size:12px;color:#718096}
+.gpsDropZone strong{margin-top:6px}
+.gpsMatchList{display:grid;gap:10px}
+.gpsMatchCard{padding:0;overflow:hidden}
+.gpsMatchSummary{display:grid;grid-template-columns:1fr 1fr 1.2fr 1.2fr auto;gap:12px;align-items:center;padding:14px 16px;cursor:pointer;background:#fff}
+.gpsMatchSummary::-webkit-details-marker{display:none}
+.gpsMatchSummary>div{display:flex;flex-direction:column;gap:2px}
+.gpsMatchSummary span{font-size:11px;color:#718096}
+.gpsMatchSummary b{font-size:14px}
+.gpsMatchSummary em{font-style:normal;font-size:12px;color:#526173;white-space:nowrap}
+.gpsMatchCard[open] .gpsMatchSummary{background:#f7fafc;border-bottom:1px solid #e4eaf0}
+@media(max-width:800px){.gpsMatchSummary{grid-template-columns:1fr 1fr}.gpsMatchSummary em{grid-column:span 2}}
