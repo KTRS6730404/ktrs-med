@@ -199,7 +199,7 @@ function PlayerPortal({profile,session,onLogout}:{profile:Profile;session:any;on
  return <div className="appFrame playerPortal">
    <aside className="mainSidebar playerNav">
      <div className="sidebarBrand"><b>KTRS FMS</b><span>PLAYER PORTAL</span></div>
-     <button className={'sidebarHome '+(screen==='mypage'?'active':'')} onClick={()=>changePlayerScreen('mypage')>HOME</button>
+     <button className={'sidebarHome '+(screen==='mypage'?'active':'')} onClick={()=>changePlayerScreen('mypage')}>HOME</button>
      {groups.map(g=>{const gn=g.key==='COMMUNICATION'?alerts.messages+alerts.chat:0;return <div className="navGroup" key={g.key}><button className={'navGroupHead '+(g.items.some(([k])=>k===screen)?'activeGroup':'')} onClick={()=>setOpen(o=>({...o,[g.key]:!o[g.key]}))}><span className="navTitleWithAlert"><span>{g.label}</span>{gn>0&&<em className="navGroupAlert">{gn}</em>}</span><span className="chev">{open[g.key]?'−':'＋'}</span></button>{open[g.key]&&<div className="navChildren">{g.items.map(([k,l])=>{const n=k==='messages'?alerts.messages:k==='chat'?alerts.chat:0;return <button key={k} className={screen===k?'active':''} onClick={()=>changePlayerScreen(k)}><span>{l}</span>{n>0&&<em>{n}</em>}</button>})}</div>}</div>})}
    </aside>
    <div className="appContent">
@@ -207,7 +207,7 @@ function PlayerPortal({profile,session,onLogout}:{profile:Profile;session:any;on
      <main className="playerMain">
        {screen==='mypage'&&<PlayerMyPage profile={profile}/>}
        {screen==='schedule'&&<PlayerSchedule profile={profile}/>}
-       {screen==='report'&&<PlayerInjuryReport profile={profile} onDone={()=>changePlayerScreen('history')/>}
+       {screen==='report'&&<PlayerInjuryReport profile={profile} onDone={()=>changePlayerScreen('history')}/>}
        {screen==='history'&&<PlayerInjuryHistory profile={profile}/>}
        {screen==='medical'&&<PlayerMedicalOverview profile={profile}/>}
        {screen==='rehab'&&<PlayerRehabView profile={profile}/>}
