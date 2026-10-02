@@ -230,3 +230,7 @@ main{max-width:none}
 .categoryManageList{display:grid;gap:6px}
 .categoryManageRow{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 10px;border:1px solid #e5ebf1;border-radius:8px;background:#fff}
 .archivedCategory{color:#8a97a6;text-decoration:line-through}
+
+.liveDateTime{font-size:12px;color:#60758a;white-space:nowrap;font-variant-numeric:tabular-nums}
+.headerUserName{font-weight:700;white-space:nowrap}
+@media(max-width:760px){.liveDateTime{display:none}}
