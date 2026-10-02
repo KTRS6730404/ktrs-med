@@ -442,7 +442,8 @@ function Players({isAdmin}:{isAdmin:boolean}){
    if(!edit)return;
    let err:any=null;
    if(edit.case_id){const {error}=await supabase.rpc('staff_update_case_status',{case_uuid:edit.case_id,new_status:edit.display_status});err=error}
-   if(!err){const {error}=await supabase.rpc('staff_set_daily_status',{target_player:edit.player_id,new_availability:edit.today_availability,new_pain_score:edit.pain_score||null,new_notes:null});err=error}\n   if(!err){const {error}=await supabase.from('daily_player_status').update({absence_reason:edit.today_availability==='out'?(edit.display_status==='rehab'?'rehab':edit.absence_reason||null):null}).eq('player_id',edit.player_id).eq('status_date',new Date().toISOString().slice(0,10));err=error}
+   if(!err){const {error}=await supabase.rpc('staff_set_daily_status',{target_player:edit.player_id,new_availability:edit.today_availability,new_pain_score:edit.pain_score||null,new_notes:null});err=error}
+   if(!err){const {error}=await supabase.from('daily_player_status').update({absence_reason:edit.today_availability==='out'?(edit.display_status==='rehab'?'rehab':edit.absence_reason||null):null}).eq('player_id',edit.player_id).eq('status_date',new Date().toISOString().slice(0,10));err=error}
    setMsg(err?err.message:'更新しました');if(!err){setEdit(null);load()}
  }
 
