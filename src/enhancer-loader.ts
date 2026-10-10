@@ -3,6 +3,7 @@ import './MemberNavCleanup';
 import './NavStructureEnhancer';
 import './PlanningManagerEnhancer';
 import './PlanningCategoryFlowEnhancer';
+import './PlanningExpandableCreateEnhancer';
 
 let homeLoaded=false;
 let sleepLoaded=false;
