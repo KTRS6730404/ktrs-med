@@ -1,78 +1,25 @@
 import './CategoryNavEnhancer';
 import './MemberNavCleanup';
+import './NavStructureEnhancer';
+import './ScheduleManagerEnhancer';
 
 let homeLoaded=false;
-let scheduleLoaded=false;
-let scheduleLoading=false;
 let sleepLoaded=false;
 
 function loadHome(){
  if(homeLoaded)return;homeLoaded=true;
  import('./HomeCalendarLite').catch(err=>{homeLoaded=false;console.error('HOME enhancer load failed',err)});
 }
-
-async function loadSchedule(){
- if(scheduleLoaded||scheduleLoading)return;
- scheduleLoading=true;
- const NativeMutationObserver=window.MutationObserver;
- class OneShotNoopObserver{
-   observe(){}
-   disconnect(){}
-   takeRecords(){return [] as MutationRecord[]}
- }
- try{
-   (window as any).MutationObserver=OneShotNoopObserver;
-   await import('./ScheduleEnhancer');
-   scheduleLoaded=true;
- }catch(err){
-   console.error('Schedule enhancer load failed',err);
- }finally{
-   (window as any).MutationObserver=NativeMutationObserver;
-   scheduleLoading=false;
- }
-}
-
 function loadSleep(){
  if(sleepLoaded)return;sleepLoaded=true;
  import('./ConditionSleepEnhancer').catch(err=>{sleepLoaded=false;console.error('Condition enhancer load failed',err)});
 }
-
-function currentTitles(){
- return Array.from(document.querySelectorAll<HTMLElement>('.title h1')).map(x=>(x.textContent||'').trim());
-}
-
+function currentTitles(){return Array.from(document.querySelectorAll<HTMLElement>('.title h1')).map(x=>(x.textContent||'').trim())}
 function initialScan(){
  if(document.querySelector('section.homePage'))loadHome();
- const title=currentTitles();
- if(title.some(t=>t==='SCHEDULE / Training'||t==='TR Creation'||t==='SCHEDULE / Games'||t==='SET / Categorys'))loadSchedule();
- if(title.some(t=>t.includes('朝のコンディション')))loadSleep();
+ const title=currentTitles();if(title.some(t=>t.includes('朝のコンディション')))loadSleep();
 }
-
-document.addEventListener('click',e=>{
- const target=e.target as HTMLElement|null;if(!target)return;
- const clickable=target.closest<HTMLElement>('button,summary');
- if(!clickable)return;
- const txt=(clickable.textContent||'').trim();
- if(txt.includes('Training')||txt.includes('Menu Creation')||txt.includes('Games')||txt.includes('TR Creation')||txt.includes('Categorys')){
-   void loadSchedule();
- }
- if(txt.includes('朝のコンディション'))loadSleep();
-},{capture:true});
-
-window.addEventListener('load',()=>{
- const ric=(window as any).requestIdleCallback as ((cb:()=>void,opts?:{timeout:number})=>number)|undefined;
- if(ric)ric(initialScan,{timeout:500});else window.setTimeout(initialScan,120);
-},{once:true});
-
-const startupObserver=new MutationObserver(()=>{
- const hasHome=!!document.querySelector('section.homePage');
- const titles=currentTitles();
- const hasSleep=titles.some(t=>t.includes('朝のコンディション'));
- const hasSchedule=titles.some(t=>t==='SCHEDULE / Training'||t==='TR Creation'||t==='SCHEDULE / Games'||t==='SET / Categorys');
- if(hasHome)loadHome();
- if(hasSleep)loadSleep();
- if(hasSchedule)void loadSchedule();
- if(hasHome||hasSleep||hasSchedule){startupObserver.disconnect()}
-});
-startupObserver.observe(document.documentElement,{childList:true,subtree:true});
-window.setTimeout(()=>startupObserver.disconnect(),1800);
+document.addEventListener('click',e=>{const target=e.target as HTMLElement|null;if(!target)return;const txt=(target.closest<HTMLElement>('button,summary')?.textContent||'').trim();if(txt.includes('朝のコンディション'))loadSleep()},{capture:true});
+window.addEventListener('load',()=>{const ric=(window as any).requestIdleCallback as ((cb:()=>void,opts?:{timeout:number})=>number)|undefined;if(ric)ric(initialScan,{timeout:500});else window.setTimeout(initialScan,120)},{once:true});
+const startupObserver=new MutationObserver(()=>{const hasHome=!!document.querySelector('section.homePage');const hasSleep=currentTitles().some(t=>t.includes('朝のコンディション'));if(hasHome)loadHome();if(hasSleep)loadSleep();if(hasHome||hasSleep)startupObserver.disconnect()});
+startupObserver.observe(document.documentElement,{childList:true,subtree:true});window.setTimeout(()=>startupObserver.disconnect(),1800);
