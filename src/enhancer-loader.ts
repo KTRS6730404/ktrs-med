@@ -2,6 +2,7 @@ import './CategoryNavEnhancer';
 import './MemberNavCleanup';
 import './NavStructureEnhancer';
 import './PlanningManagerEnhancer';
+import './PlanningCategoryFlowEnhancer';
 
 let homeLoaded=false;
 let sleepLoaded=false;
