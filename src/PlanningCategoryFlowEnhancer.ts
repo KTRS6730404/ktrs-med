@@ -1,4 +1,6 @@
-let activeCategory:{id:number;name:string}|null=null;
+export {};
+
+let activePlanningCategory:{id:number;name:string}|null=null;
 let categoryCreationMode=false;
 
 function setSelectValue(select:HTMLSelectElement,value:string){
@@ -14,12 +16,12 @@ function findTeamCategorySelect(){
 }
 
 function syncCreationCategory(){
- if(!categoryCreationMode||!activeCategory)return;
+ if(!categoryCreationMode||!activePlanningCategory)return;
  const select=findTeamCategorySelect();
  if(select){
-  if(select.value!==String(activeCategory.id))setSelectValue(select,String(activeCategory.id));
+  if(select.value!==String(activePlanningCategory.id))setSelectValue(select,String(activePlanningCategory.id));
   select.disabled=true;
-  select.title=`${activeCategory.name} に保存されます`;
+  select.title=`${activePlanningCategory.name} に保存されます`;
  }
  const context=document.querySelector<HTMLElement>('.pm .pmContext');
  const heading=context?.querySelector<HTMLElement>('h2');
@@ -30,7 +32,7 @@ function syncCreationCategory(){
 
 function enhanceCategoryView(){
  const context=document.querySelector<HTMLElement>('.pm .pmContext');
- if(!context||!activeCategory)return;
+ if(!context||!activePlanningCategory)return;
  const button=Array.from(context.querySelectorAll<HTMLButtonElement>('button')).find(b=>['Training/Gameへ戻る','Training/Gameの作成'].includes((b.textContent||'').trim()));
  if(button){
   button.textContent='Training/Gameの作成';
@@ -47,16 +49,38 @@ function enhanceCategoryView(){
  }
 }
 
+function scheduleCategoryEnhance(){
+ window.setTimeout(enhanceCategoryView,0);
+ window.setTimeout(enhanceCategoryView,100);
+ window.setTimeout(enhanceCategoryView,240);
+}
+
 window.addEventListener('ktrs-schedule-category',(e:Event)=>{
  const d=(e as CustomEvent).detail;
- if(d?.id){activeCategory={id:Number(d.id),name:String(d.name||'Category')};categoryCreationMode=false;window.setTimeout(enhanceCategoryView,0);window.setTimeout(enhanceCategoryView,120)}
+ if(d?.id){
+  activePlanningCategory={id:Number(d.id),name:String(d.name||'Category')};
+  categoryCreationMode=false;
+  scheduleCategoryEnhance();
+ }
 });
 
 document.addEventListener('click',e=>{
  const target=e.target as HTMLElement|null;
  const nav=target?.closest<HTMLButtonElement>('.scheduleCategoryItem');
- if(nav){const id=Number(nav.dataset.categoryId||'0');const name=(nav.textContent||'').trim();if(id)activeCategory={id,name};categoryCreationMode=false}
+ if(nav){
+  const id=Number(nav.dataset.categoryId||'0');
+  const name=(nav.textContent||'').trim();
+  if(id)activePlanningCategory={id,name};
+  categoryCreationMode=false;
+  scheduleCategoryEnhance();
+  return;
+ }
+ const button=target?.closest<HTMLButtonElement>('button');
+ const txt=(button?.textContent||'').trim();
+ if(txt==='Training/Gameの作成'){
+  categoryCreationMode=true;
+  window.setTimeout(syncCreationCategory,0);
+  window.setTimeout(syncCreationCategory,80);
+  window.setTimeout(syncCreationCategory,220);
+ }
 },true);
-
-const observer=new MutationObserver(()=>{enhanceCategoryView();syncCreationCategory()});
-observer.observe(document.documentElement,{childList:true,subtree:true});
