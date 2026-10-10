@@ -66,3 +66,5 @@ document.head.appendChild(style);
 const observer = new MutationObserver(enhanceSleepInput);
 observer.observe(document.documentElement, { childList: true, subtree: true });
 enhanceSleepInput();
+
+export {};
