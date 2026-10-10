@@ -1,7 +1,7 @@
 import './CategoryNavEnhancer';
 import './MemberNavCleanup';
 import './NavStructureEnhancer';
-import './ScheduleManagerEnhancer';
+import './PlanningManagerEnhancer';
 
 let homeLoaded=false;
 let sleepLoaded=false;
