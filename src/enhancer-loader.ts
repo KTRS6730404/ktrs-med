@@ -4,6 +4,7 @@ import './NavStructureEnhancer';
 import './PlanningManagerEnhancer';
 import './PlanningCategoryFlowEnhancer';
 import './PlanningExpandableCreateEnhancer';
+import './TrainingMenuReuseEnhancer';
 
 let homeLoaded=false;
 let sleepLoaded=false;
