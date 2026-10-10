@@ -8,13 +8,16 @@ const STATUS_HELPERS=`const statusLabel:Record<string,string>={needs_attention:'
 const AVATAR_HELPER=`function Avatar({path,name,size=48}:{path?:string|null;name:string;size?:number}){\n const [url,setUrl]=useState('');\n useEffect(()=>{let alive=true;if(!path){setUrl('');return}supabase.storage.from('profile-photos').createSignedUrl(path,3600).then(({data})=>{if(alive)setUrl(data?.signedUrl||'')});return()=>{alive=false}},[path]);\n const initials=(name||'?').slice(0,1);\n return <div className="avatar" style={{width:size,height:size,minWidth:size}}>{url?<img src={url} alt={name}/>:<span>{initials}</span>}</div>;\n}`;
 
 type Extracted=Record<string,string>;
+function compileTsx(code:string){
+ return ts.transpileModule(code,{compilerOptions:{target:ts.ScriptTarget.ES2020,module:ts.ModuleKind.ESNext,jsx:ts.JsxEmit.ReactJSX,esModuleInterop:true}}).outputText;
+}
 function splitHeavyPages(){
  const extracted:Extracted={};
  const virtualIds={
-   game:'\0ktrs-lazy-game.tsx',
-   video:'\0ktrs-lazy-video.tsx',
-   players:'\0ktrs-lazy-players.tsx',
-   cases:'\0ktrs-lazy-cases.tsx',
+   game:'\0ktrs-lazy-game.js',
+   video:'\0ktrs-lazy-video.js',
+   players:'\0ktrs-lazy-players.js',
+   cases:'\0ktrs-lazy-cases.js',
  } as const;
  function spans(source:string,names:string[]){
    const sf=ts.createSourceFile('main.tsx',source,ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX);
@@ -43,10 +46,12 @@ function splitHeavyPages(){
    },
    load(id:string){
      const base=`import React,{useEffect,useMemo,useState} from 'react';\nimport {supabase} from '/src/supabase.ts';\n${PROFILE_TYPE}\n${TITLE_HELPER}\n`;
-     if(id===virtualIds.game)return `${base}${AVATAR_HELPER}\n${extracted.GameAnalysis}\nexport default GameAnalysis;`;
-     if(id===virtualIds.video)return `${base}${extracted.VideoClipManager}\nexport default VideoClipManager;`;
-     if(id===virtualIds.players)return `${base}${STATUS_HELPERS}\n${AVATAR_HELPER}\n${extracted.PlayerComprehensiveDashboard}\n${extracted.Players}\nexport default Players;`;
-     if(id===virtualIds.cases)return `${base}${STATUS_HELPERS}\n${extracted.Cases}\nexport default Cases;`;
+     let code='';
+     if(id===virtualIds.game)code=`${base}${AVATAR_HELPER}\n${extracted.GameAnalysis}\nexport default GameAnalysis;`;
+     if(id===virtualIds.video)code=`${base}${extracted.VideoClipManager}\nexport default VideoClipManager;`;
+     if(id===virtualIds.players)code=`${base}${STATUS_HELPERS}\n${AVATAR_HELPER}\n${extracted.PlayerComprehensiveDashboard}\n${extracted.Players}\nexport default Players;`;
+     if(id===virtualIds.cases)code=`${base}${STATUS_HELPERS}\n${extracted.Cases}\nexport default Cases;`;
+     return code?compileTsx(code):null;
    },
    transform(source:string,id:string){
      if(!id.endsWith('/src/main.tsx'))return null;
