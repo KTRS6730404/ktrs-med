@@ -1,4 +1,5 @@
 import './CategoryNavEnhancer';
+import './MemberNavCleanup';
 
 let homeLoaded=false;
 let scheduleLoaded=false;
