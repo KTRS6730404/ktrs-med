@@ -6,82 +6,27 @@ const PROFILE_TYPE=`type Profile={id:string;role:'player'|'staff';full_name:stri
 const TITLE_HELPER=`function Title({t}:{t:string;s?:string}){return <div className="title"><h1>{t}</h1></div>}`;
 const STATUS_HELPERS=`const statusLabel:Record<string,string>={needs_attention:'要対応',rehab:'リハビリ中',observation:'経過観察',available:'問題なし'};\nconst statusClass:Record<string,string>={needs_attention:'danger',rehab:'info',observation:'warn',available:'ok'};\nconst availabilityLabel:Record<string,string>={out:'参加不可',modified:'別メニュー',partial:'部分参加',full:'通常参加'};`;
 const AVATAR_HELPER=`function Avatar({path,name,size=48}:{path?:string|null;name:string;size?:number}){\n const [url,setUrl]=useState('');\n useEffect(()=>{let alive=true;if(!path){setUrl('');return}supabase.storage.from('profile-photos').createSignedUrl(path,3600).then(({data})=>{if(alive)setUrl(data?.signedUrl||'')});return()=>{alive=false}},[path]);\n const initials=(name||'?').slice(0,1);\n return <div className="avatar" style={{width:size,height:size,minWidth:size}}>{url?<img src={url} alt={name}/>:<span>{initials}</span>}</div>;\n}`;
+const HOME_COMPONENT=`function HomeTeamLite({isAdmin,profile}:{isAdmin:boolean;profile:Profile|null}){\n const [players,setPlayers]=useState<any[]>([]),[messages,setMessages]=useState<any[]>([]);\n useEffect(()=>{(async()=>{const calls:any[]=[supabase.from('player_directory').select('player_id,full_name,school_grade,position,avatar_path,display_status,today_availability,absence_reason,injury_name,pain_score').eq('is_hidden',false).order('school_grade',{ascending:false}).order('full_name')];if(profile?.id)calls.push(supabase.from('chat_messages').select('id,body,created_at,read_at').eq('recipient_id',profile.id).order('created_at',{ascending:false}).limit(5));else calls.push(Promise.resolve({data:[]}));if(isAdmin)calls.push(supabase.rpc('admin_list_accounts',{filter_status:'pending'}));else calls.push(Promise.resolve({data:[]}));const [p,m,a]=await Promise.all(calls);setPlayers(p.data||[]);setMessages([...(a.data||[]).map((x:any)=>({id:'approval-'+x.user_id,body:'アカウント承認リクエスト：'+x.full_name+'（'+(x.role==='player'?'選手':'スタッフ')+'）',created_at:x.created_at||new Date().toISOString(),read_at:null})),...(m.data||[])]);})()},[profile?.id,isAdmin]);\n const nonParticipants=players.filter((p:any)=>p.today_availability==='out');const participants=Math.max(0,players.length-nonParticipants.length);const reason=(p:any)=>p.display_status==='rehab'?'リハビリ':p.absence_reason==='absent'?'欠席':p.absence_reason==='illness'?'体調不良':p.absence_reason==='other'?'その他':'理由未設定';\n return <section className="homePage"><Title t="HOME"/><div className="homeGrid"><div className="panel homeMessages"><h3>新着メッセージ</h3>{messages.length?messages.map((m:any)=><div className={'homeMessage '+(!m.read_at?'unreadMessage':'')} key={m.id}><b>新着</b><span>{new Date(m.created_at).toLocaleString('ja-JP')}</span><p>{m.body}</p></div>):<div className="empty">新着メッセージはありません。</div>}</div><div className="panel attendanceCard"><h3>TR参加人数</h3><div className="attendanceCount"><b>{participants}</b><span> / {players.length}名</span></div><details className="absenceDetails"><summary>TR不参加者 {nonParticipants.length}名</summary>{nonParticipants.length?nonParticipants.map((p:any)=><div className="absenceRow" key={p.player_id}><div className="personCell"><Avatar path={p.avatar_path} name={p.full_name} size={34}/><b>{p.full_name}</b></div><div>{p.school_grade||'-'}年 / {p.position||'-'}</div><div><span className="pill warn">{reason(p)}</span>{p.injury_name&&<small>{p.injury_name}</small>}</div><div>{p.pain_score!=null?'Pain '+p.pain_score+'/10':'Pain -'}</div></div>):<div className="empty">TR不参加者はいません。</div>}</details></div></div><div className="panel weeklySchedule"><div className="scheduleHeader"><div><h3>スケジュール</h3><p>カレンダーを読み込み中...</p></div></div></div></section>;\n}`;
 
 type Extracted=Record<string,string>;
-function compileTsx(code:string){
- return ts.transpileModule(code,{compilerOptions:{target:ts.ScriptTarget.ES2020,module:ts.ModuleKind.ESNext,jsx:ts.JsxEmit.ReactJSX,esModuleInterop:true}}).outputText;
-}
+function compileTsx(code:string){return ts.transpileModule(code,{compilerOptions:{target:ts.ScriptTarget.ES2020,module:ts.ModuleKind.ESNext,jsx:ts.JsxEmit.ReactJSX,esModuleInterop:true}}).outputText;}
 function splitHeavyPages(){
  const extracted:Extracted={};
- const virtualIds={
-   game:'\0ktrs-lazy-game.js',
-   video:'\0ktrs-lazy-video.js',
-   players:'\0ktrs-lazy-players.js',
-   cases:'\0ktrs-lazy-cases.js',
- } as const;
- function spans(source:string,names:string[]){
-   const sf=ts.createSourceFile('main.tsx',source,ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX);
-   const found:{name:string;start:number;end:number;code:string}[]=[];
-   for(const node of sf.statements){
-     if(ts.isFunctionDeclaration(node)&&node.name&&names.includes(node.name.text)){
-       found.push({name:node.name.text,start:node.getFullStart(),end:node.end,code:source.slice(node.getStart(sf),node.end)});
-     }
-   }
-   return found;
- }
+ const virtualIds={game:'\0ktrs-lazy-game.js',video:'\0ktrs-lazy-video.js',players:'\0ktrs-lazy-players.js',cases:'\0ktrs-lazy-cases.js',home:'\0ktrs-lazy-home.js',alerts:'\0ktrs-lazy-alerts.js'} as const;
+ function spans(source:string,names:string[]){const sf=ts.createSourceFile('main.tsx',source,ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX);const found:{name:string;start:number;end:number;code:string}[]=[];for(const node of sf.statements){if(ts.isFunctionDeclaration(node)&&node.name&&names.includes(node.name.text))found.push({name:node.name.text,start:node.getFullStart(),end:node.end,code:source.slice(node.getStart(sf),node.end)});}return found;}
  const wrappers:Record<string,string>={
-   GameAnalysis:`const LazyGameAnalysis=React.lazy(()=>import('virtual:ktrs-game'));\nfunction GameAnalysis(props:{profile:Profile|null}){return <React.Suspense fallback={<div className="panel">Game Reviewを読み込み中...</div>}><LazyGameAnalysis {...props}/></React.Suspense>}`,
-   VideoClipManager:`const LazyVideoClipManager=React.lazy(()=>import('virtual:ktrs-video'));\nfunction VideoClipManager(props:{profile:Profile|null}){return <React.Suspense fallback={<div className="panel">Videoを読み込み中...</div>}><LazyVideoClipManager {...props}/></React.Suspense>}`,
-   Players:`const LazyPlayers=React.lazy(()=>import('virtual:ktrs-players'));\nfunction Players(props:{isAdmin:boolean}){return <React.Suspense fallback={<div className="panel">Playersを読み込み中...</div>}><LazyPlayers {...props}/></React.Suspense>}`,
-   Cases:`const LazyCases=React.lazy(()=>import('virtual:ktrs-cases'));\nfunction Cases(props:{isAdmin:boolean}){return <React.Suspense fallback={<div className="panel">Injuryを読み込み中...</div>}><LazyCases {...props}/></React.Suspense>}`,
+  GameAnalysis:`const LazyGameAnalysis=React.lazy(()=>import('virtual:ktrs-game'));\nfunction GameAnalysis(props:{profile:Profile|null}){return <React.Suspense fallback={<div className="panel">Game Reviewを読み込み中...</div>}><LazyGameAnalysis {...props}/></React.Suspense>}`,
+  VideoClipManager:`const LazyVideoClipManager=React.lazy(()=>import('virtual:ktrs-video'));\nfunction VideoClipManager(props:{profile:Profile|null}){return <React.Suspense fallback={<div className="panel">Videoを読み込み中...</div>}><LazyVideoClipManager {...props}/></React.Suspense>}`,
+  Players:`const LazyPlayers=React.lazy(()=>import('virtual:ktrs-players'));\nfunction Players(props:{isAdmin:boolean}){return <React.Suspense fallback={<div className="panel">Playersを読み込み中...</div>}><LazyPlayers {...props}/></React.Suspense>}`,
+  Cases:`const LazyCases=React.lazy(()=>import('virtual:ktrs-cases'));\nfunction Cases(props:{isAdmin:boolean}){return <React.Suspense fallback={<div className="panel">Injuryを読み込み中...</div>}><LazyCases {...props}/></React.Suspense>}`,
+  Team:`const LazyHomeTeam=React.lazy(()=>import('virtual:ktrs-home'));\nfunction Team(props:{isAdmin:boolean;profile:Profile|null}){return <React.Suspense fallback={<section className="homePage"><div className="title"><h1>HOME</h1></div><div className="panel">HOMEを読み込み中...</div></section>}><LazyHomeTeam {...props}/></React.Suspense>}`,
+  StaffAutoAlerts:`const LazyStaffAutoAlerts=React.lazy(()=>import('virtual:ktrs-alerts'));\nfunction StaffAutoAlerts(){const [ready,setReady]=useState(false);useEffect(()=>{const id=window.setTimeout(()=>setReady(true),900);return()=>window.clearTimeout(id)},[]);return ready?<React.Suspense fallback={null}><LazyStaffAutoAlerts/></React.Suspense>:null;}`,
  };
- return {
-   name:'ktrs-split-heavy-pages',
-   enforce:'pre' as const,
-   resolveId(id:string){
-     if(id==='virtual:ktrs-game')return virtualIds.game;
-     if(id==='virtual:ktrs-video')return virtualIds.video;
-     if(id==='virtual:ktrs-players')return virtualIds.players;
-     if(id==='virtual:ktrs-cases')return virtualIds.cases;
-   },
-   load(id:string){
-     const base=`import React,{useEffect,useMemo,useState} from 'react';\nimport {supabase} from '/src/supabase.ts';\n${PROFILE_TYPE}\n${TITLE_HELPER}\n`;
-     let code='';
-     if(id===virtualIds.game)code=`${base}${AVATAR_HELPER}\n${extracted.GameAnalysis}\nexport default GameAnalysis;`;
-     if(id===virtualIds.video)code=`${base}${extracted.VideoClipManager}\nexport default VideoClipManager;`;
-     if(id===virtualIds.players)code=`${base}${STATUS_HELPERS}\n${AVATAR_HELPER}\n${extracted.PlayerComprehensiveDashboard}\n${extracted.Players}\nexport default Players;`;
-     if(id===virtualIds.cases)code=`${base}${STATUS_HELPERS}\n${extracted.Cases}\nexport default Cases;`;
-     return code?compileTsx(code):null;
-   },
-   transform(source:string,id:string){
-     if(!id.endsWith('/src/main.tsx'))return null;
-     const names=['GameAnalysis','VideoClipManager','Players','PlayerComprehensiveDashboard','Cases'];
-     const parts=spans(source,names);
-     for(const p of parts)extracted[p.name]=p.code;
-     if(!extracted.GameAnalysis||!extracted.VideoClipManager||!extracted.Players||!extracted.PlayerComprehensiveDashboard||!extracted.Cases){
-       this.warn('Heavy page split skipped because one or more functions were not found.');return null;
-     }
-     let out=source;
-     for(const p of [...parts].sort((a,b)=>b.start-a.start)){
-       const replacement=p.name==='PlayerComprehensiveDashboard'?'':wrappers[p.name]||'';
-       out=out.slice(0,p.start)+replacement+out.slice(p.end);
-     }
-     return {code:out,map:null};
-   },
+ return {name:'ktrs-split-heavy-pages',enforce:'pre' as const,
+  resolveId(id:string){if(id==='virtual:ktrs-game')return virtualIds.game;if(id==='virtual:ktrs-video')return virtualIds.video;if(id==='virtual:ktrs-players')return virtualIds.players;if(id==='virtual:ktrs-cases')return virtualIds.cases;if(id==='virtual:ktrs-home')return virtualIds.home;if(id==='virtual:ktrs-alerts')return virtualIds.alerts;},
+  load(id:string){const base=`import React,{useEffect,useMemo,useState} from 'react';\nimport {supabase} from '/src/supabase.ts';\n${PROFILE_TYPE}\n${TITLE_HELPER}\n`;let code='';if(id===virtualIds.game)code=`${base}${AVATAR_HELPER}\n${extracted.GameAnalysis}\nexport default GameAnalysis;`;if(id===virtualIds.video)code=`${base}${extracted.VideoClipManager}\nexport default VideoClipManager;`;if(id===virtualIds.players)code=`${base}${STATUS_HELPERS}\n${AVATAR_HELPER}\n${extracted.PlayerComprehensiveDashboard}\n${extracted.Players}\nexport default Players;`;if(id===virtualIds.cases)code=`${base}${STATUS_HELPERS}\n${extracted.Cases}\nexport default Cases;`;if(id===virtualIds.home)code=`${base}${AVATAR_HELPER}\n${HOME_COMPONENT}\nexport default HomeTeamLite;`;if(id===virtualIds.alerts)code=`${base}${extracted.StaffAutoAlerts}\nexport default StaffAutoAlerts;`;return code?compileTsx(code):null;},
+  transform(source:string,id:string){if(!id.endsWith('/src/main.tsx'))return null;const names=['GameAnalysis','VideoClipManager','Players','PlayerComprehensiveDashboard','Cases','Team','StaffAutoAlerts'];const parts=spans(source,names);for(const p of parts)extracted[p.name]=p.code;if(!names.every(n=>extracted[n])){this.warn('Page split skipped because one or more functions were not found.');return null;}let out=source;for(const p of [...parts].sort((a,b)=>b.start-a.start)){const replacement=p.name==='PlayerComprehensiveDashboard'?'':wrappers[p.name]||'';out=out.slice(0,p.start)+replacement+out.slice(p.end);}return {code:out,map:null};}
  };
 }
 
-export default defineConfig({
-  plugins: [splitHeavyPages(),react()],
-  base: '/ktrs-med/',
-  build: {
-    rollupOptions: {
-      output: {
-        manualChunks(id) {
-          if (id.includes('node_modules/react') || id.includes('node_modules/react-dom')) return 'vendor-react';
-          if (id.includes('node_modules/@supabase')) return 'vendor-supabase';
-        },
-      },
-    },
-  },
-});
+export default defineConfig({plugins:[splitHeavyPages(),react()],base:'/ktrs-med/',build:{rollupOptions:{output:{manualChunks(id){if(id.includes('node_modules/react')||id.includes('node_modules/react-dom'))return 'vendor-react';if(id.includes('node_modules/@supabase'))return 'vendor-supabase';}}}}});
