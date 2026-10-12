@@ -3,7 +3,10 @@ export {};
 let loading:Promise<unknown>|null=null;
 
 function loadBoard(){
-  if(!loading) loading=import('./TrainingBoardEnhancer').catch(err=>{loading=null;console.error('Training board load failed',err);throw err});
+  if(!loading) loading=Promise.all([
+    import('./TrainingBoardEnhancer'),
+    import('./TrainingBoardPreviewEnhancer')
+  ]).catch(err=>{loading=null;console.error('Training board load failed',err);throw err});
   return loading;
 }
 
@@ -23,7 +26,7 @@ function attachButtons(){
       try{
         await loadBoard();
         b.remove();
-        await new Promise(r=>window.setTimeout(r,50));
+        await new Promise(r=>window.setTimeout(r,30));
         const real=editor.querySelector<HTMLButtonElement>('.trainingBoardButton');
         real?.click();
       }catch{
@@ -35,13 +38,13 @@ function attachButtons(){
   });
 }
 
-function schedule(){window.setTimeout(attachButtons,0);window.setTimeout(attachButtons,120)}
+function schedule(){window.setTimeout(attachButtons,0);window.setTimeout(attachButtons,100)}
 
 document.addEventListener('click',e=>{
   const btn=(e.target as HTMLElement|null)?.closest<HTMLButtonElement>('button');
   if(!btn)return;
   const txt=(btn.textContent||'').trim();
-  if(txt.includes('Training/Gameを作成')||txt.includes('新規作成')||txt.includes('メニュー追加')||txt.includes('Training'))schedule();
+  if(txt.includes('Training/Gameを作成')||txt.includes('新規作成')||txt.includes('メニュー追加')||txt==='Training/Game')schedule();
 },true);
 window.addEventListener('ktrs-schedule-category',schedule as EventListener);
 if(document.querySelector('.pm'))schedule();
