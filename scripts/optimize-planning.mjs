@@ -3,9 +3,8 @@ import {readFile,writeFile} from 'node:fs/promises';
 const file=new URL('../src/PlanningManagerEnhancer.tsx',import.meta.url);
 let source=await readFile(file,'utf8');
 
-if(source.includes('KTRS_PLANNING_FAST_BOOT'))process.exit(0);
-
-const replacement=` async function loadBase(){
+if(!source.includes('KTRS_PLANNING_FAST_BOOT')){
+ const replacement=` async function loadBase(){
   /* KTRS_PLANNING_FAST_BOOT */
   const now=new Date();
   const from=new Date(now);from.setDate(from.getDate()-120);
@@ -40,9 +39,17 @@ const replacement=` async function loadBase(){
  }
 
  const trOptions=`;
+ const pattern=/ async function loadBase\(\)\{[\s\S]*?\n \}\n\n const trOptions=/;
+ if(!pattern.test(source))throw new Error('Planning loadBase block not found; optimization was not applied.');
+ source=source.replace(pattern,replacement);
+}
 
-const pattern=/ async function loadBase\(\)\{[\s\S]*?\n \}\n\n const trOptions=/;
-if(!pattern.test(source))throw new Error('Planning loadBase block not found; optimization was not applied.');
-source=source.replace(pattern,replacement);
+if(!source.includes('KTRS_PLANNING_ROBUST_MOUNT')){
+ const oldMount=`function scheduleMount(){setTimeout(mount,0);setTimeout(mount,80);setTimeout(mount,220)}\ndocument.addEventListener('click',e=>{const txt=((e.target as HTMLElement|null)?.closest('button')?.textContent||'').trim();if(txt==='Training/Game')scheduleMount()},{capture:true});let tries=0;const timer=setInterval(()=>{tries++;if(mount()||tries>15)clearInterval(timer)},120);`;
+ const newMount=`/* KTRS_PLANNING_ROBUST_MOUNT */\nlet mountObserver:MutationObserver|null=null;\nlet mountObserverTimer:number|undefined;\nfunction stopMountObserver(){if(mountObserver){mountObserver.disconnect();mountObserver=null}if(mountObserverTimer){window.clearTimeout(mountObserverTimer);mountObserverTimer=undefined}}\nfunction watchForPlanningHost(){\n if(mount()){stopMountObserver();return}\n if(mountObserver)return;\n const target=document.querySelector('.appContent main')||document.body;\n mountObserver=new MutationObserver(()=>{if(mount())stopMountObserver()});\n mountObserver.observe(target,{childList:true,subtree:true});\n mountObserverTimer=window.setTimeout(()=>{if(mount()){stopMountObserver()}else{stopMountObserver()}},15000);\n}\nfunction scheduleMount(){setTimeout(()=>{if(!mount())watchForPlanningHost()},0);setTimeout(()=>{if(!mount())watchForPlanningHost()},120);setTimeout(()=>{if(!mount())watchForPlanningHost()},400)}\ndocument.addEventListener('click',e=>{const txt=((e.target as HTMLElement|null)?.closest('button')?.textContent||'').trim();if(txt==='Training'||txt==='Training/Game'||txt==='Planning')scheduleMount()},{capture:true});\nwindow.addEventListener('ktrs-schedule-category',scheduleMount);\nscheduleMount();`;
+ if(!source.includes(oldMount))throw new Error('Planning mount block not found; robust mount was not applied.');
+ source=source.replace(oldMount,newMount);
+}
+
 await writeFile(file,source,'utf8');
-console.log('Applied fast bootstrap to PlanningManagerEnhancer.tsx');
+console.log('Applied Planning fast bootstrap and robust mount');
