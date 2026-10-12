@@ -2,11 +2,8 @@ import './CategoryNavEnhancer';
 import './CategoryHeaderCleanup';
 import './MemberNavCleanup';
 import './NavStructureEnhancer';
-import './PlanningManagerEnhancer';
-import './PlanningExpandableCreateEnhancer';
-import './TrainingMenuReuseEnhancer';
+import './PlanningFeatureLoader';
 import './TrainingBoardLazyLoader';
-import './TRMenuModeEnhancer';
 
 let homeLoaded=false;
 let sleepLoaded=false;
