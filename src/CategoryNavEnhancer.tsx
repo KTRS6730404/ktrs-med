@@ -4,7 +4,7 @@ import {supabase} from './supabase';
 
 type Category={id:number;name:string;color_hex:string;description:string|null;notes:string|null;is_active:boolean;sort_order:number|null};
 
-function CategoryManagerPage({onClose}:{onClose:()=>void}){
+function CategoryManagerPage(){
  const [rows,setRows]=useState<Category[]>([]),[editing,setEditing]=useState<Category|null>(null),[creating,setCreating]=useState(false),[msg,setMsg]=useState('');
  const [form,setForm]=useState({name:'',color_hex:'#5B8DEF',description:'',notes:''});
  useEffect(()=>{load()},[]);
@@ -14,7 +14,7 @@ function CategoryManagerPage({onClose}:{onClose:()=>void}){
  async function save(){if(!form.name.trim()){setMsg('Category名を入力してください。');return}const {data:{user}}=await supabase.auth.getUser();if(!user)return;const payload={name:form.name.trim(),color_hex:form.color_hex,description:form.description||null,notes:form.notes||null,updated_at:new Date().toISOString()};let error:any;if(editing){({error}=await supabase.from('schedule_entry_categories').update(payload).eq('id',editing.id))}else{({error}=await supabase.from('schedule_entry_categories').insert({...payload,sort_order:rows.length+1,created_by:user.id}))}if(error){setMsg(error.message);return}setCreating(false);setEditing(null);setMsg(editing?'Categoryを更新しました。':'Categoryを追加しました。');await load();window.dispatchEvent(new CustomEvent('ktrs-categories-changed'))}
  async function remove(r:Category){if(!confirm(`「${r.name}」を削除しますか？`))return;const {error}=await supabase.from('schedule_entry_categories').delete().eq('id',r.id);setMsg(error?error.message:'Categoryを削除しました。');if(!error){await load();window.dispatchEvent(new CustomEvent('ktrs-categories-changed'))}}
  return <section className="categoryStandalonePage">
-   <div className="categoryPageHeader"><div><span>CATEGORY MANAGEMENT</span><h1>Category</h1><p>チームカテゴリーの追加・編集・削除を行います。</p></div><div className="categoryHeaderActions"><button className="categoryAddBtn" onClick={openAdd}>＋ 追加</button><button className="secondary" onClick={onClose}>閉じる</button></div></div>
+   <div className="categoryPageHeader"><div><span>CATEGORY MANAGEMENT</span><h1>Category</h1><p>チームカテゴリーの追加・編集・削除を行います。</p></div><div className="categoryHeaderActions"><button className="categoryAddBtn" onClick={openAdd}>＋ 追加</button></div></div>
    {msg&&<div className="notice">{msg}</div>}
    <div className="categoryStandaloneGrid">{rows.map(r=><article className="categoryStandaloneCard" key={r.id} style={{borderTopColor:r.color_hex||'#5B8DEF'}}><div className="categoryCardTitle"><i style={{background:r.color_hex||'#5B8DEF'}}></i><div><h3>{r.name}</h3><p>{r.description||'説明未設定'}</p></div></div>{r.notes&&<small>{r.notes}</small>}<div className="categoryCardActions"><button className="secondary" onClick={()=>openEdit(r)}>編集</button><button className="dangerBtn" onClick={()=>remove(r)}>削除</button></div></article>)}</div>
    {!rows.length&&<div className="panel empty">Categoryはまだありません。「追加」から作成してください。</div>}
@@ -24,7 +24,7 @@ function CategoryManagerPage({onClose}:{onClose:()=>void}){
 
 let root:Root|null=null;let host:HTMLElement|null=null;let initialized=false;
 function closeCategory(){if(root){root.unmount();root=null}host?.remove();host=null;document.querySelectorAll<HTMLElement>('main > *').forEach(el=>{if(el.dataset.categoryHidden==='1'){el.style.display='';delete el.dataset.categoryHidden}});document.querySelector('.teamCategoryButton')?.classList.remove('active')}
-function openCategory(){const main=document.querySelector<HTMLElement>('.appContent main');if(!main)return;closeCategory();document.querySelectorAll<HTMLElement>('main > *').forEach(el=>{el.dataset.categoryHidden='1';el.style.display='none'});host=document.createElement('div');host.className='standaloneCategoryHost';main.appendChild(host);root=createRoot(host);root.render(<CategoryManagerPage onClose={closeCategory}/>);document.querySelector('.teamCategoryButton')?.classList.add('active')}
+function openCategory(){const main=document.querySelector<HTMLElement>('.appContent main');if(!main)return;closeCategory();document.querySelectorAll<HTMLElement>('main > *').forEach(el=>{el.dataset.categoryHidden='1';el.style.display='none'});host=document.createElement('div');host.className='standaloneCategoryHost';main.appendChild(host);root=createRoot(host);root.render(<CategoryManagerPage/>);document.querySelector('.teamCategoryButton')?.classList.add('active')}
 
 const labelMap:Record<string,string>={HOME:'Dashboard',Dashboard:'Dashboard',TEAM:'Team',Member:'Team',SCHEDULE:'Planning',Schedule:'Planning',Planning:'Planning',PERFORMANCE:'Stats',Performance:'Stats',Stats:'Stats',MEDICAL:'Medical',DEVELOPMENT:'Development',COMMUNICATION:'Communication',MANAGEMENT:'Management',SET:'Set'};
 function normalizeTopLabels(sidebar:HTMLElement){Array.from(sidebar.querySelectorAll<HTMLElement>('.navGroupHead .navTitleWithAlert > span')).forEach(el=>{const t=(el.textContent||'').trim();if(labelMap[t])el.textContent=labelMap[t]});Array.from(sidebar.querySelectorAll<HTMLButtonElement>('button')).forEach(btn=>{const t=(btn.textContent||'').trim();if(t==='HOME')btn.textContent='Dashboard'})}
