@@ -1,4 +1,5 @@
 import './CategoryNavEnhancer';
+import './CategoryHeaderCleanup';
 import './MemberNavCleanup';
 import './NavStructureEnhancer';
 import './PlanningManagerEnhancer';
