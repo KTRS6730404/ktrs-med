@@ -4,6 +4,7 @@ import './MemberNavCleanup';
 import './NavStructureEnhancer';
 import './PlanningFeatureLoader';
 import './TrainingBoardLazyLoader';
+import './TrainingBoardPreviewEnhancer';
 
 let homeLoaded=false;
 let sleepLoaded=false;
