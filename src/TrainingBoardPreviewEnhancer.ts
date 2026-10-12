@@ -22,17 +22,31 @@ function svg(data:BoardData){
 function render(editor:HTMLElement){
  const data=parseBoard(editor);let box=editor.querySelector<HTMLElement>('.trainingBoardPreview');
  if(!data||(!data.objects.length&&!data.lines.length)){box?.remove();return}
- if(!box){box=document.createElement('div');box.className='trainingBoardPreview';const anchor=editor.querySelector('.menuTop')||editor.firstElementChild;anchor?.insertAdjacentElement('afterend',box)}
  const count=data.objects.length+data.lines.length;
+ const signature=`${editor.dataset.trainingBoard||''}|${count}`;
+ if(box?.dataset.signature===signature)return;
+ if(!box){box=document.createElement('div');box.className='trainingBoardPreview';const anchor=editor.querySelector('.menuTop')||editor.firstElementChild;anchor?.insertAdjacentElement('afterend',box)}
+ box.dataset.signature=signature;
  box.innerHTML=`<button type="button" class="trainingBoardPreviewButton"><span class="trainingBoardPreviewCanvas">${svg(data)}</span><span class="trainingBoardPreviewMeta"><b>コート図</b><small>${count}項目｜クリックして編集</small></span></button>`;
- box.querySelector('button')?.addEventListener('click',()=>editor.querySelector<HTMLButtonElement>('.trainingBoardButton,.trainingBoardLazyButton')?.click(),{once:true});
+ box.querySelector('button')?.addEventListener('click',()=>editor.querySelector<HTMLButtonElement>('.trainingBoardButton,.trainingBoardLazyButton')?.click());
 }
-function scan(){document.querySelectorAll<HTMLElement>('.pm .menuEditor').forEach(render)}
-const observer=new MutationObserver(muts=>{if(muts.some(m=>m.type==='attributes'&&m.attributeName==='data-training-board'||m.type==='childList'))scan()});
-function start(){const pm=document.querySelector<HTMLElement>('.pm');if(!pm)return;scan();observer.disconnect();observer.observe(pm,{subtree:true,childList:true,attributes:true,attributeFilter:['data-training-board']})}
-window.addEventListener('ktrs-schedule-category',()=>window.setTimeout(start,0));
-document.addEventListener('click',e=>{const t=(e.target as HTMLElement|null)?.closest('button');if((t?.textContent||'').includes('Training'))window.setTimeout(start,120)},true);
-if(document.querySelector('.pm'))start();
+function scanOnce(){document.querySelectorAll<HTMLElement>('.pm .menuEditor').forEach(render)}
+
+const observer=new MutationObserver(muts=>{
+  for(const m of muts){
+    if(m.type!=='attributes'||m.attributeName!=='data-training-board')continue;
+    const editor=(m.target as HTMLElement).closest<HTMLElement>('.menuEditor');
+    if(editor)render(editor);
+  }
+});
+function start(){
+  const pm=document.querySelector<HTMLElement>('.pm');
+  if(!pm)return;
+  scanOnce();
+  observer.disconnect();
+  observer.observe(pm,{subtree:true,attributes:true,attributeFilter:['data-training-board']});
+}
+start();
 
 const style=document.createElement('style');
 style.textContent=`
@@ -41,11 +55,7 @@ style.textContent=`
 .trainingBoardOverlay .trainingBoardLayout{flex:1!important;min-height:0!important;overflow:hidden!important}
 .trainingBoardOverlay .trainingBoardCanvasWrap{min-height:0!important;height:100%!important;display:flex!important;align-items:center!important;justify-content:center!important;padding:14px!important;box-sizing:border-box!important}
 .trainingBoardOverlay .trainingBoardCanvas{max-width:100%!important;max-height:100%!important;width:100%!important;height:auto!important;aspect-ratio:8/5!important}
-.trainingBoardPreview{margin:10px 0 4px}
-.trainingBoardPreviewButton{width:100%;display:grid;grid-template-columns:minmax(180px,280px) 1fr;gap:12px;align-items:center;text-align:left;background:#f7fafc!important;color:#213547!important;border:1px solid #d9e4ee!important;border-radius:12px!important;padding:8px!important}
-.trainingBoardPreviewCanvas{display:block;overflow:hidden;border-radius:8px;box-shadow:inset 0 0 0 1px rgba(255,255,255,.3)}
-.trainingBoardPreviewCanvas svg{display:block;width:100%;height:auto}
-.trainingBoardPreviewMeta{display:grid;gap:4px}.trainingBoardPreviewMeta b{font-size:14px}.trainingBoardPreviewMeta small{color:#6f8192}
+.trainingBoardPreview{margin:10px 0 4px}.trainingBoardPreviewButton{width:100%;display:grid;grid-template-columns:minmax(180px,280px) 1fr;gap:12px;align-items:center;text-align:left;background:#f7fafc!important;color:#213547!important;border:1px solid #d9e4ee!important;border-radius:12px!important;padding:8px!important}.trainingBoardPreviewCanvas{display:block;overflow:hidden;border-radius:8px}.trainingBoardPreviewCanvas svg{display:block;width:100%;height:auto}.trainingBoardPreviewMeta{display:grid;gap:4px}.trainingBoardPreviewMeta b{font-size:14px}.trainingBoardPreviewMeta small{color:#6f8192}
 @media(max-width:800px){.trainingBoardOverlay{padding:0!important}.trainingBoardOverlay .trainingBoardCard{width:100vw!important;height:100dvh!important;border-radius:0!important}.trainingBoardPreviewButton{grid-template-columns:140px 1fr}.trainingBoardOverlay .trainingBoardLayout{overflow:auto!important}}
 `;
 document.head.appendChild(style);
