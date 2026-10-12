@@ -1,18 +1,47 @@
 export {};
 
-let planningLoaded=false;
-let planningLoading:Promise<unknown>|null=null;
+let coreLoaded=false;
+let coreLoading:Promise<unknown>|null=null;
+let extrasLoaded=false;
+let extrasLoading:Promise<unknown>|null=null;
+let scheduled=false;
 
-function loadPlanning(){
-  if(planningLoaded)return Promise.resolve();
-  if(planningLoading)return planningLoading;
-  planningLoading=Promise.all([
-    import('./PlanningManagerEnhancer'),
+function loadPlanningCore(){
+  if(coreLoaded)return Promise.resolve();
+  if(coreLoading)return coreLoading;
+  coreLoading=import('./PlanningManagerEnhancer')
+    .then(()=>{coreLoaded=true})
+    .catch(err=>{coreLoading=null;console.error('Planning core load failed',err)});
+  return coreLoading;
+}
+
+function loadPlanningExtras(){
+  if(extrasLoaded)return Promise.resolve();
+  if(extrasLoading)return extrasLoading;
+  extrasLoading=Promise.all([
     import('./PlanningExpandableCreateEnhancer'),
     import('./TrainingMenuReuseEnhancer'),
     import('./TRMenuModeEnhancer')
-  ]).then(()=>{planningLoaded=true}).catch(err=>{planningLoading=null;console.error('Planning features load failed',err)});
-  return planningLoading;
+  ]).then(()=>{extrasLoaded=true}).catch(err=>{extrasLoading=null;console.error('Planning extras load failed',err)});
+  return extrasLoading;
+}
+
+function idleExtras(){
+  const run=()=>void loadPlanningExtras();
+  const ric=(window as any).requestIdleCallback as ((cb:()=>void,opts?:{timeout:number})=>number)|undefined;
+  if(ric)ric(run,{timeout:1200});
+  else window.setTimeout(run,700);
+}
+
+function schedulePlanningLoad(){
+  if(scheduled||coreLoaded)return;
+  scheduled=true;
+  requestAnimationFrame(()=>{
+    window.setTimeout(()=>{
+      scheduled=false;
+      void loadPlanningCore().then(()=>idleExtras());
+    },40);
+  });
 }
 
 function planningVisible(){
@@ -23,9 +52,15 @@ function planningVisible(){
 
 document.addEventListener('click',e=>{
   const target=e.target as HTMLElement|null;if(!target)return;
-  const txt=(target.closest<HTMLElement>('button,summary')?.textContent||'').trim();
-  if(/Planning|Training|Schedule/.test(txt))void loadPlanning();
+  const control=target.closest<HTMLElement>('button,summary');
+  const txt=(control?.textContent||'').trim();
+  if(/Planning|Training/.test(txt))schedulePlanningLoad();
 },{capture:true});
 
-window.addEventListener('ktrs-schedule-category',()=>void loadPlanning());
-window.addEventListener('load',()=>{if(planningVisible())void loadPlanning()},{once:true});
+window.addEventListener('ktrs-schedule-category',()=>{
+  void loadPlanningCore().then(()=>void loadPlanningExtras());
+});
+
+window.addEventListener('load',()=>{
+  if(planningVisible())schedulePlanningLoad();
+},{once:true});
