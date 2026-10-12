@@ -33,7 +33,7 @@ function enhanceCategoryView(){
  const context=root.querySelector<HTMLElement>('.pmContext');const heading=context?.querySelector<HTMLElement>('h2');
  if(!context||!heading||heading.textContent?.trim()!==activeCategory.name)return;
  showHost();captureLibrary();
- const native=currentNativeCreateButton();if(!native)return;native.style.display='none';
+ Array.from(context.querySelectorAll<HTMLButtonElement>('button')).forEach(b=>{b.style.display='none'});
  root.querySelector('.trainingGameCreateOpenBar')?.remove();root.querySelector('.compactCreatedMenuSection')?.remove();
  let bar=root.querySelector<HTMLElement>('.trainingGameCreateBar');
  if(!bar){
