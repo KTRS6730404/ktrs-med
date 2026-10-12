@@ -5,7 +5,7 @@ import './NavStructureEnhancer';
 import './PlanningManagerEnhancer';
 import './PlanningExpandableCreateEnhancer';
 import './TrainingMenuReuseEnhancer';
-import './TrainingBoardEnhancer';
+import './TrainingBoardLazyLoader';
 import './TRMenuModeEnhancer';
 
 let homeLoaded=false;
