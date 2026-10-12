@@ -1,5 +1,12 @@
 export {};
 
-const style=document.createElement('style');
-style.textContent=`.categoryPageHeader .categoryHeaderActions .secondary{display:none!important}`;
-document.head.appendChild(style);
+function removeCategoryCloseButton(){
+  document.querySelectorAll<HTMLElement>('.categoryPageHeader .categoryHeaderActions button').forEach(button=>{
+    if((button.textContent||'').trim()==='閉じる')button.remove();
+  });
+}
+
+removeCategoryCloseButton();
+
+const observer=new MutationObserver(()=>removeCategoryCloseButton());
+observer.observe(document.documentElement,{childList:true,subtree:true});
