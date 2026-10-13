@@ -4,9 +4,9 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "predev": "node scripts/optimize-planning.mjs && node scripts/optimize-training-board.mjs && node scripts/optimize-training-pitch.mjs && node scripts/optimize-training-board-colors.mjs && node scripts/optimize-injury-report-v2.mjs && node scripts/optimize-saved-menu-actions.mjs && node scripts/optimize-bmi-targets.mjs && node scripts/optimize-idp-tr.mjs && node scripts/optimize-player-menu-order.mjs",
+    "predev": "node scripts/optimize-planning.mjs && node scripts/optimize-training-board.mjs && node scripts/optimize-training-pitch.mjs && node scripts/optimize-training-board-colors.mjs && node scripts/optimize-injury-report-v2.mjs && node scripts/optimize-saved-menu-actions.mjs && node scripts/optimize-bmi-targets.mjs && node scripts/optimize-idp-tr.mjs && node scripts/optimize-player-menu-order.mjs && node scripts/optimize-mobile-logout.mjs",
     "dev": "vite",
-    "prebuild": "node scripts/optimize-planning.mjs && node scripts/optimize-training-board.mjs && node scripts/optimize-training-pitch.mjs && node scripts/optimize-training-board-colors.mjs && node scripts/optimize-injury-report-v2.mjs && node scripts/optimize-saved-menu-actions.mjs && node scripts/optimize-bmi-targets.mjs && node scripts/optimize-idp-tr.mjs && node scripts/optimize-player-menu-order.mjs",
+    "prebuild": "node scripts/optimize-planning.mjs && node scripts/optimize-training-board.mjs && node scripts/optimize-training-pitch.mjs && node scripts/optimize-training-board-colors.mjs && node scripts/optimize-injury-report-v2.mjs && node scripts/optimize-saved-menu-actions.mjs && node scripts/optimize-bmi-targets.mjs && node scripts/optimize-idp-tr.mjs && node scripts/optimize-player-menu-order.mjs && node scripts/optimize-mobile-logout.mjs",
     "build": "tsc -b && vite build",
     "preview": "vite preview"
   },
