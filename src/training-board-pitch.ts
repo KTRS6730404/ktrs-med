@@ -43,27 +43,29 @@ function fullPitch(){
 }
 
 function halfPitch(){
- // Left-side half of the 105x68m pitch, rotated 90° clockwise.
- // Result: goal at the top and attack direction from bottom to top.
+ // Half pitch rotated 90° clockwise: goal at top, attack direction bottom -> top.
+ // Scale is based on the 68m touchline width so both touchlines sit flush with the canvas sides.
+ // The halfway line is intentionally outside the visible crop.
+ const s=BOARD_W/68;
+ const fieldW=BOARD_W;
  const halfLengthM=52.5;
- const s=BOARD_H/halfLengthM;
- const fieldW=68*s,fieldH=halfLengthM*s;
- const x=(BOARD_W-fieldW)/2,y=0,cx=BOARD_W/2,bottom=y+fieldH;
+ const fieldH=halfLengthM*s;
+ const x=0,y=0,cx=BOARD_W/2;
  const penaltyDepth=PENALTY_DEPTH_M*s,penaltyWidth=PENALTY_WIDTH_M*s;
  const goalAreaDepth=GOAL_AREA_DEPTH_M*s,goalAreaWidth=GOAL_AREA_WIDTH_M*s;
  const goalWidth=GOAL_WIDTH_M*s,penaltyMark=PENALTY_MARK_M*s;
  const centerR=CIRCLE_R_M*s,cornerR=CORNER_R_M*s;
  const paX=cx-penaltyWidth/2,gaX=cx-goalAreaWidth/2,goalX=cx-goalWidth/2;
  const stripeCount=10;
- const stripes=Array.from({length:stripeCount},(_,i)=>{const h=fieldH/stripeCount;return rect(x,y+i*h,fieldW,h,`fill="${i%2?'#3f9a36':'#53aa3e'}" stroke="none"`)}).join('');
+ const stripeH=BOARD_H/stripeCount;
+ const stripes=Array.from({length:stripeCount},(_,i)=>rect(x,i*stripeH,fieldW,stripeH,`fill="${i%2?'#3f9a36':'#53aa3e'}" stroke="none"`)).join('');
  const off=arcOffset(s),arcY=y+penaltyDepth,markY=y+penaltyMark;
  const penaltyArc=`<path d="M ${n(cx-off)} ${n(arcY)} A ${n(centerR)} ${n(centerR)} 0 0 0 ${n(cx+off)} ${n(arcY)}"/>`;
- const centerArc=`<path d="M ${n(cx-centerR)} ${n(bottom)} A ${n(centerR)} ${n(centerR)} 0 0 0 ${n(cx+centerR)} ${n(bottom)}"/>`;
  const corners=`<path d="M ${n(x)} ${n(y+cornerR)} A ${n(cornerR)} ${n(cornerR)} 0 0 0 ${n(x+cornerR)} ${n(y)} M ${n(x+fieldW-cornerR)} ${n(y)} A ${n(cornerR)} ${n(cornerR)} 0 0 0 ${n(x+fieldW)} ${n(y+cornerR)}"/>`;
- const lines=`<g class="pitchLines" stroke="white" stroke-width="2.4" fill="none" opacity=".98">${rect(x,y,fieldW,fieldH)}${rect(paX,y,penaltyWidth,penaltyDepth)}${rect(gaX,y,goalAreaWidth,goalAreaDepth)}<circle cx="${n(cx)}" cy="${n(markY)}" r="3" fill="white" stroke="none"/>${penaltyArc}${centerArc}${corners}</g>`;
- const goalDepth=Math.min(14,y+14);
- const goal=`<g stroke="white" stroke-width="2" fill="none" opacity=".96">${rect(goalX,Math.max(0,y-goalDepth),goalWidth,goalDepth)}</g>`;
- return `<rect width="${BOARD_W}" height="${BOARD_H}" fill="#203d25"/>${stripes}${lines}${goal}`;
+ const lines=`<g class="pitchLines" stroke="white" stroke-width="2.4" fill="none" opacity=".98"><line x1="0" y1="0" x2="0" y2="${BOARD_H}"/><line x1="${BOARD_W}" y1="0" x2="${BOARD_W}" y2="${BOARD_H}"/><line x1="0" y1="0" x2="${BOARD_W}" y2="0"/>${rect(paX,y,penaltyWidth,penaltyDepth)}${rect(gaX,y,goalAreaWidth,goalAreaDepth)}<circle cx="${n(cx)}" cy="${n(markY)}" r="3" fill="white" stroke="none"/>${penaltyArc}${corners}</g>`;
+ const goalDepth=14;
+ const goal=`<g stroke="white" stroke-width="2" fill="none" opacity=".96">${rect(goalX,0,goalWidth,goalDepth)}</g>`;
+ return `<rect width="${BOARD_W}" height="${BOARD_H}" fill="#2d7f31"/>${stripes}${lines}${goal}`;
 }
 
 export function pitchMarkup(half=false){return half?halfPitch():fullPitch()}
