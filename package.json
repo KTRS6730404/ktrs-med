@@ -4,9 +4,9 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "predev": "node scripts/optimize-planning.mjs && node scripts/optimize-training-board.mjs && node scripts/optimize-training-pitch.mjs",
+    "predev": "node scripts/optimize-planning.mjs && node scripts/optimize-training-board.mjs && node scripts/optimize-training-pitch.mjs && node scripts/optimize-training-board-colors.mjs",
     "dev": "vite",
-    "prebuild": "node scripts/optimize-planning.mjs && node scripts/optimize-training-board.mjs && node scripts/optimize-training-pitch.mjs",
+    "prebuild": "node scripts/optimize-planning.mjs && node scripts/optimize-training-board.mjs && node scripts/optimize-training-pitch.mjs && node scripts/optimize-training-board-colors.mjs",
     "build": "tsc -b && vite build",
     "preview": "vite preview"
   },
