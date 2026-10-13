@@ -5,12 +5,24 @@ let coreLoading:Promise<unknown>|null=null;
 let extrasLoaded=false;
 let extrasLoading:Promise<unknown>|null=null;
 let scheduled=false;
+let transitionObserver:MutationObserver|null=null;
+let transitionTimer=0;
+
+function findLegacyTrainingSection(){
+  if(document.querySelector('.planningManagerHost,.pm'))return null;
+  const headings=Array.from(document.querySelectorAll<HTMLElement>('.title h1'));
+  const h=headings.find(x=>/^(SCHEDULE \/ Training|Schedule \/ Training\/Game|SCHEDULE \/ Training\/Game|Planning \/ Training\/Game|TR Creation)$/i.test((x.textContent||'').trim()));
+  return h?.closest('section') as HTMLElement|null;
+}
 
 function maskLegacyTraining(){
-  if(document.querySelector('.planningManagerHost'))return true;
-  const h=Array.from(document.querySelectorAll<HTMLElement>('.title h1')).find(x=>(x.textContent||'').trim()==='SCHEDULE / Training');
-  const section=h?.closest('section') as HTMLElement|null;
+  if(document.querySelector('.planningManagerHost,.pm')){
+    document.querySelectorAll('.ktrsPlanningLoading').forEach(node=>node.remove());
+    return true;
+  }
+  const section=findLegacyTrainingSection();
   if(!section)return false;
+  const h=section.querySelector<HTMLElement>('.title h1');
   Array.from(section.children).forEach(el=>{
     const node=el as HTMLElement;
     if(node.classList.contains('title')||node.classList.contains('planningManagerHost')||node.classList.contains('ktrsPlanningLoading'))return;
@@ -20,22 +32,39 @@ function maskLegacyTraining(){
     const loading=document.createElement('div');
     loading.className='panel ktrsPlanningLoading';
     loading.textContent='Trainingメニューを読み込み中...';
-    h!.closest('.title')?.insertAdjacentElement('afterend',loading);
+    h?.closest('.title')?.insertAdjacentElement('afterend',loading);
   }
   return true;
 }
 
+function stopTransitionGuard(){
+  transitionObserver?.disconnect();transitionObserver=null;
+  if(transitionTimer){window.clearTimeout(transitionTimer);transitionTimer=0}
+  document.documentElement.classList.remove('ktrsPlanningTransition');
+}
+
 function restoreLegacyTraining(){
+  stopTransitionGuard();
   document.querySelectorAll<HTMLElement>('[data-ktrs-training-hidden="1"]').forEach(node=>{delete node.dataset.ktrsTrainingHidden;node.style.removeProperty('display')});
   document.querySelectorAll('.ktrsPlanningLoading').forEach(node=>node.remove());
 }
 
-function prepareTrainingTransition(){
+function startTransitionGuard(){
+  document.documentElement.classList.add('ktrsPlanningTransition');
   maskLegacyTraining();
+  transitionObserver?.disconnect();
+  transitionObserver=new MutationObserver(()=>{
+    maskLegacyTraining();
+    if(document.querySelector('.planningManagerHost,.pm'))stopTransitionGuard();
+  });
+  transitionObserver.observe(document.body||document.documentElement,{childList:true,subtree:true});
+  if(transitionTimer)window.clearTimeout(transitionTimer);
+  transitionTimer=window.setTimeout(()=>stopTransitionGuard(),10000);
+}
+
+function prepareTrainingTransition(){
+  startTransitionGuard();
   requestAnimationFrame(()=>maskLegacyTraining());
-  window.setTimeout(()=>maskLegacyTraining(),40);
-  window.setTimeout(()=>maskLegacyTraining(),120);
-  window.setTimeout(()=>maskLegacyTraining(),300);
 }
 
 function loadPlanningCore(){
@@ -70,11 +99,15 @@ function schedulePlanningLoad(){
   if(scheduled||coreLoaded)return;
   scheduled=true;
   requestAnimationFrame(()=>{
-    window.setTimeout(()=>{
-      scheduled=false;
-      void loadPlanningCore().then(()=>idleExtras());
-    },20);
+    scheduled=false;
+    void loadPlanningCore().then(()=>idleExtras());
   });
+}
+
+function planningControl(target:HTMLElement|null){
+  const control=target?.closest<HTMLElement>('button,summary');
+  const txt=(control?.textContent||'').trim();
+  return txt==='Training'||txt==='Training/Game'||/Planning/.test(txt);
 }
 
 function planningVisible(){
@@ -83,11 +116,16 @@ function planningVisible(){
   return /Planning|Training\/Gameを作成|TRメニュー構成|SCHEDULE \/ Training/.test(text);
 }
 
+document.addEventListener('pointerdown',e=>{
+  const target=e.target as HTMLElement|null;
+  if(!planningControl(target))return;
+  prepareTrainingTransition();
+  void loadPlanningCore();
+},{capture:true});
+
 document.addEventListener('click',e=>{
-  const target=e.target as HTMLElement|null;if(!target)return;
-  const control=target.closest<HTMLElement>('button,summary');
-  const txt=(control?.textContent||'').trim();
-  if(txt==='Training'||txt==='Training/Game'||/Planning/.test(txt))schedulePlanningLoad();
+  const target=e.target as HTMLElement|null;
+  if(planningControl(target))schedulePlanningLoad();
 },{capture:true});
 
 window.addEventListener('ktrs-schedule-category',()=>{
