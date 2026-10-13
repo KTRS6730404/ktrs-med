@@ -22,7 +22,7 @@ if(!source.includes("supabase.from('target_bmi_settings').select('target_bmi')")
 }
 
 const oldBmi=`       <div><span>BMI</span><b>{bmi?bmi.toFixed(1):'-'}</b></div>`;
-const v1Bmi=`       <div><span>BMI</span><b>{bmi?bmi.toFixed(1):'-'}</b>{targetBmi!=null&&<small style={{display:'block',marginTop:4}}>基準 {targetBmi.toFixed(1)} / 差 {bmiDiff==null?'-':\`${bmiDiff>=0?'+':''}${bmiDiff.toFixed(1)}\`}</small>}</div>`;
+const v1Bmi="       <div><span>BMI</span><b>{bmi?bmi.toFixed(1):'-'}</b>{targetBmi!=null&&<small style={{display:'block',marginTop:4}}>基準 {targetBmi.toFixed(1)} / 差 {bmiDiff==null?'-':`${bmiDiff>=0?'+':''}${bmiDiff.toFixed(1)}`}</small>}</div>";
 const v2Bmi=`       <div><span>BMI</span><b className="playerBmiValue">{bmi?bmi.toFixed(1):'-'}{bmiDiff!=null&&<small className={'playerBmiDiff '+(bmiDiff<0?'minus':bmiDiff>0?'plus':'zero')}>（{bmiDiff>0?'+':''}{bmiDiff.toFixed(1)}）</small>}</b></div>`;
 source=source.replace(oldBmi,v2Bmi).replace(v1Bmi,v2Bmi);
 
