@@ -9,7 +9,9 @@ source=source.replace("function emptyReport(){return {injury_date:'',symptom:'',
   .replaceAll("r.review_status==='pending'","r.review_status==='未確認'");
 
 const playerStart=source.indexOf('function PlayerInjuryReport(');
-const playerEnd=source.indexOf('\nfunction PlayerInjuryHistory',playerStart);
+const attachmentsStart=source.indexOf('\nfunction InjuryAttachments',playerStart);
+const historyStart=source.indexOf('\nfunction PlayerInjuryHistory',playerStart);
+const playerEnd=attachmentsStart>=0?attachmentsStart:historyStart;
 if(playerStart<0||playerEnd<0)throw new Error('PlayerInjuryReport block not found');
 const playerBlock=`function PlayerInjuryReport({profile,onDone}:{profile:Profile;onDone:()=>void}){
  const [form,setForm]=useState<any>(emptyReport()),[msg,setMsg]=useState(''),[files,setFiles]=useState<File[]>([]),[uploading,setUploading]=useState(false),[sent,setSent]=useState<{id:number;warning:string}|null>(null);
