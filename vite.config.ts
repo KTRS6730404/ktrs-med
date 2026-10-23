@@ -35,4 +35,15 @@ function splitHeavyPages(){
  };
 }
 
-export default defineConfig({plugins:[splitHeavyPages(),react()],base:'/ktrs-med/',build:{rollupOptions:{output:{manualChunks(id){if(id.includes('node_modules/react')||id.includes('node_modules/react-dom'))return 'vendor-react';if(id.includes('node_modules/@supabase'))return 'vendor-supabase';}}}}});
+
+function buildVersionPlugin(){
+ const buildId=Date.now().toString();
+ return {
+  name:'ktrs-build-version',
+  transformIndexHtml(html:string){
+   return html.replace('<head>','<head><meta name="ktrs-build" content="'+buildId+'"/>');
+  }
+ };
+}
+
+export default defineConfig({plugins:[splitHeavyPages(),react(),buildVersionPlugin()],base:'/ktrs-med/',build:{rollupOptions:{output:{manualChunks(id){if(id.includes('node_modules/react')||id.includes('node_modules/react-dom'))return 'vendor-react';if(id.includes('node_modules/@supabase'))return 'vendor-supabase';}}}}});
